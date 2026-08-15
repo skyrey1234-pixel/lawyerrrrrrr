@@ -112,3 +112,8 @@ temp/
 # Manus version file (auto-generated, not part of source)
 client/public/__manus__/version.json
 .project-config.json
+
+# Large Audio Files
+gregory_audio/*.mp3
+!gregory_audio/court_tv_kowalski.m4a.mp3
+
