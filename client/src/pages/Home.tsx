@@ -635,6 +635,8 @@ export default function Home() {
 
       <Dialog open={privacyOpen} onOpenChange={setPrivacyOpen}>
         <DialogContent className="overflow-hidden border-[#d6b65d]/25 bg-[#0b1725] p-0 text-[#f7f1e5] sm:max-w-2xl">
+          <DialogTitle className="sr-only">CounselScribe prototype privacy boundary</DialogTitle>
+          <DialogDescription className="sr-only">Explains the privacy limits of browser speech processing and prohibits real client or privileged information in this proof of concept.</DialogDescription>
           <div className="privacy-visual relative min-h-52">
             <img src={PRODUCT_MARK} alt="" className="absolute right-8 top-1/2 h-32 w-32 -translate-y-1/2 object-contain opacity-35" />
             <div className="absolute inset-0 p-7 sm:p-9">
