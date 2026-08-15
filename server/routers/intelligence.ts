@@ -39,5 +39,5 @@ export const intelligenceRouter = router({
     if (!source) throw new Error("Transcript source could not be loaded");
     return runAnalysis(ctx.user.id, { matterId: input.matterId, sourceDocumentId, content: source.contentSnapshot });
   }),
-  reviewItem: protectedProcedure.input(z.object({ itemId: z.number().int().positive(), status: z.enum(["accepted", "rejected"]) })).mutation(({ ctx, input }) => reviewAnalysisItem(ctx.user.id, input)),
+  reviewItem: protectedProcedure.input(z.object({ itemId: z.number().int().positive(), status: z.enum(["accepted", "rejected"]), billingCodeId: z.number().int().positive().optional() })).mutation(({ ctx, input }) => reviewAnalysisItem(ctx.user.id, input)),
 });

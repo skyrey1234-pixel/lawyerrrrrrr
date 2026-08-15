@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { enforceBillingEvidence, isSourceGrounded, normalizedBillingFingerprint, parseBillingVoiceCommand, parseExplicitDurationSeconds } from "./billing";
+import { enforceBillingEvidence, hasCompletedWorkEvidence, isSourceGrounded, normalizedBillingFingerprint, parseBillingVoiceCommand, parseExplicitDurationSeconds } from "./billing";
 
 describe("CounselScribe billing evidence guardrails", () => {
   it("accepts only explicit numeric time statements", () => {
@@ -26,6 +26,13 @@ describe("CounselScribe billing evidence guardrails", () => {
     });
     expect(candidate?.durationSeconds).toBeNull();
     expect(candidate?.explicitDurationText).toBe("");
+  });
+
+  it("rejects legal-news commentary while retaining explicit completed attorney work", () => {
+    expect(hasCompletedWorkEvidence("based on the evidence we've been watching you present")).toBe(false);
+    expect(hasCompletedWorkEvidence("The client asked her to draft a motion in limine.")).toBe(false);
+    expect(hasCompletedWorkEvidence("Attorney Maya Reed reviewed the deposition notice.")).toBe(true);
+    expect(hasCompletedWorkEvidence("She spent 24 minutes reviewing the responses.")).toBe(true);
   });
 
   it("parses explicit timer and billing voice commands without estimating time", () => {

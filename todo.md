@@ -54,3 +54,21 @@
 - [x] Keep AI-extracted findings and billing candidates staged as proposed records until an attorney accepts or rejects each item.
 - [x] Create a billing-ledger entry only when an attorney accepts a staged billing candidate; reject without linking it.
 - [x] Validate pasted-text and transcript review decisions end to end and confirm staged, accepted, and rejected persistence in both the UI and database.
+
+## Real Transcript Validation and Firm Billing Codes
+
+- [x] Locate an authorized user-provided transcript sample and record its source boundary for the validation run.
+- [x] Add firm billing codes with unique code, label, category, description, default narrative, display order, and active status.
+- [x] Restrict billing-code creation, editing, activation, and reordering to firm administrators.
+- [x] Add protected billing-code list and administration APIs with duplicate-code validation.
+- [x] Build a Firm Billing Codes settings panel with create, edit, activate, deactivate, and ordering controls.
+- [x] Replace fixed billing activities in timers, manual drafts, voice billing, AI candidates, review rows, and CSV exports with firm-defined codes while preserving legacy fallbacks.
+- [x] Test the real transcript through Matter AI and verify source-grounded findings, future-work separation, explicit-duration handling, and staged billing candidates.
+- [x] Accept and reject selected real-transcript findings and verify only accepted candidates enter the billing ledger.
+- [x] Verify administrator permissions, duplicate-code prevention, inactive-code behavior, mobile layout, tests, production build, and fresh runtime logs.
+- [x] Save and deliver the real-transcript and firm-billing-code checkpoint.
+- [x] Display the mapped firm billing code on staged Matter AI and transcript billing candidates before attorney acceptance.
+- [x] Validate an AI-generated billing candidate through firm-code mapping, attorney acceptance or rejection, ledger persistence, and export metadata.
+- [x] Run a transcript-derived explicit-duration work sample, confirm its staged billing card displays the mapped firm code, and preserve UI plus database evidence.
+- [x] Reject a firm-code-mapped staged billing candidate and verify no billing ledger row is created or linked.
+- [x] Deactivate CS-REV, confirm it is unavailable for new timers, manual drafts, and AI candidate acceptance, and confirm historical CS-REV ledger and export records still display correctly before reactivation.

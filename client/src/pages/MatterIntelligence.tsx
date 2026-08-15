@@ -22,6 +22,36 @@ const itemConfig = {
 
 type ItemType = keyof typeof itemConfig;
 
+type AnalysisItemRecord = {
+  id: number;
+  itemType: string;
+  label: string;
+  value: string;
+  sourceQuote: string;
+  status: "proposed" | "accepted" | "rejected";
+};
+
+type BillingCodeOption = { id: number; code: string; label: string; category: string };
+
+function AnalysisItemCard({ item, billingCodes, pending, onReview }: {
+  item: AnalysisItemRecord;
+  billingCodes: BillingCodeOption[];
+  pending: boolean;
+  onReview: (itemId: number, status: "accepted" | "rejected", billingCodeId?: number) => void;
+}) {
+  const suggested = billingCodes.find(code => code.category === item.label || code.code === item.label);
+  const [selectedCodeId, setSelectedCodeId] = useState<number | undefined>(suggested?.id);
+  useEffect(() => { if (!selectedCodeId && suggested) setSelectedCodeId(suggested.id); }, [selectedCodeId, suggested]);
+  const selectedCode = billingCodes.find(code => code.id === selectedCodeId);
+  const isBilling = item.itemType === "billing";
+  return <article className="border-l-2 border-white/10 bg-white/[0.025] p-4">
+    <div className="flex items-start justify-between gap-3"><div><strong className="text-sm">{item.label}</strong><p className="mt-2 text-xs leading-relaxed text-[#a5afba]">{item.value}</p></div><span className={`shrink-0 font-mono text-[8px] uppercase tracking-[0.1em] ${item.status === "accepted" ? "text-[#b7c7ac]" : item.status === "rejected" ? "text-[#d08e86]" : "text-[#d6b65d]"}`}>{item.status}</span></div>
+    <blockquote className="mt-3 border-l border-[#d6b65d]/45 pl-3 text-[11px] italic leading-relaxed text-[#8996a3]">“{item.sourceQuote}”</blockquote>
+    {isBilling ? <div className="mt-4 space-y-2"><Label htmlFor={`candidate-code-${item.id}`}>Firm billing code</Label><Select value={selectedCodeId ? String(selectedCodeId) : "legacy"} onValueChange={value => setSelectedCodeId(value === "legacy" ? undefined : Number(value))}><SelectTrigger id={`candidate-code-${item.id}`} className="border-white/10 bg-white/5"><SelectValue /></SelectTrigger><SelectContent>{billingCodes.map(code => <SelectItem key={code.id} value={String(code.id)}>{code.code} · {code.label}</SelectItem>)}<SelectItem value="legacy">{item.label} · legacy fallback</SelectItem></SelectContent></Select><p className="font-mono text-[9px] uppercase tracking-[0.11em] text-[#7f8b98]">{selectedCode ? `Will enter ledger as ${selectedCode.code} · ${selectedCode.label}` : `Will preserve legacy activity ${item.label}`}</p></div> : null}
+    {item.status === "proposed" ? <div className="mt-4 grid grid-cols-2 gap-2"><Button size="sm" className="bg-[#d6b65d] text-[#07111d]" disabled={pending} onClick={() => onReview(item.id, "accepted", isBilling ? selectedCodeId : undefined)}><Check className="mr-1 h-3.5 w-3.5" /> Accept</Button><Button size="sm" variant="outline" className="border-white/12 bg-transparent" disabled={pending} onClick={() => onReview(item.id, "rejected")}><X className="mr-1 h-3.5 w-3.5" /> Reject</Button></div> : null}
+  </article>;
+}
+
 export default function MatterIntelligence() {
   const utils = trpc.useUtils();
   const matters = trpc.matters.list.useQuery();
@@ -30,6 +60,7 @@ export default function MatterIntelligence() {
   const matter = trpc.matters.get.useQuery({ matterId: selectedMatterId }, { enabled: Boolean(selectedMatterId) });
   const intelligence = trpc.intelligence.get.useQuery({ matterId: selectedMatterId }, { enabled: Boolean(selectedMatterId) });
   const billing = trpc.billing.list.useQuery({ matterId: selectedMatterId }, { enabled: Boolean(selectedMatterId) });
+  const billingCodes = trpc.billing.codes.list.useQuery({ includeInactive: false });
   const [title, setTitle] = useState("Attorney-provided matter text");
   const [content, setContent] = useState("");
   const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
@@ -125,7 +156,7 @@ export default function MatterIntelligence() {
             <div className="mb-6 border border-[#d6b65d]/18 bg-[#eee9dd] p-6 text-[#28251f] shadow-[0_20px_60px_rgba(0,0,0,.22)]"><span className="font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-[#756b55]">AI reading memo · attorney verification required</span><h2 className="mt-3 font-display text-3xl">Executive summary</h2><p className="mt-4 whitespace-pre-wrap text-sm leading-7">{activeRun.summary || "Analysis is still running."}</p></div>
             <div className="grid gap-5 xl:grid-cols-2">{(Object.keys(itemConfig) as ItemType[]).map(type => {
               const config = itemConfig[type]; const Icon = config.icon; const items = grouped[type];
-              return <section key={type} className="border border-white/10 bg-[#0a1827] p-5"><div className="mb-4 flex items-center justify-between gap-3"><div className="flex items-center gap-3"><Icon className="h-4 w-4 text-[#d6b65d]" /><h3 className="font-display text-2xl">{config.title}</h3></div><span className="font-mono text-[9px] uppercase tracking-[0.13em] text-[#788592]">{items.length}</span></div><div className="space-y-3">{items.length ? items.map(item => <article key={item.id} className="border-l-2 border-white/10 bg-white/[0.025] p-4"><div className="flex items-start justify-between gap-3"><div><strong className="text-sm">{item.label}</strong><p className="mt-2 text-xs leading-relaxed text-[#a5afba]">{item.value}</p></div><span className={`shrink-0 font-mono text-[8px] uppercase tracking-[0.1em] ${item.status === "accepted" ? "text-[#b7c7ac]" : item.status === "rejected" ? "text-[#d08e86]" : "text-[#d6b65d]"}`}>{item.status}</span></div><blockquote className="mt-3 border-l border-[#d6b65d]/45 pl-3 text-[11px] italic leading-relaxed text-[#8996a3]">“{item.sourceQuote}”</blockquote>{item.status === "proposed" ? <div className="mt-4 grid grid-cols-2 gap-2"><Button size="sm" className="bg-[#d6b65d] text-[#07111d]" disabled={reviewItem.isPending} onClick={() => reviewItem.mutate({ itemId: item.id, status: "accepted" })}><Check className="mr-1 h-3.5 w-3.5" /> Accept</Button><Button size="sm" variant="outline" className="border-white/12 bg-transparent" disabled={reviewItem.isPending} onClick={() => reviewItem.mutate({ itemId: item.id, status: "rejected" })}><X className="mr-1 h-3.5 w-3.5" /> Reject</Button></div> : null}</article>) : <p className="border border-dashed border-white/12 p-4 text-xs text-[#7f8b98]">No source-grounded items in this category.</p>}</div></section>;
+              return <section key={type} className="border border-white/10 bg-[#0a1827] p-5"><div className="mb-4 flex items-center justify-between gap-3"><div className="flex items-center gap-3"><Icon className="h-4 w-4 text-[#d6b65d]" /><h3 className="font-display text-2xl">{config.title}</h3></div><span className="font-mono text-[9px] uppercase tracking-[0.13em] text-[#788592]">{items.length}</span></div><div className="space-y-3">{items.length ? items.map(item => <AnalysisItemCard key={item.id} item={item as AnalysisItemRecord} billingCodes={billingCodes.data || []} pending={reviewItem.isPending} onReview={(itemId, status, billingCodeId) => reviewItem.mutate({ itemId, status, billingCodeId })} />) : <p className="border border-dashed border-white/12 p-4 text-xs text-[#7f8b98]">No source-grounded items in this category.</p>}</div></section>;
             })}</div>
             <div className="mt-6 flex items-center justify-between border border-white/10 bg-white/[0.025] p-4 text-xs text-[#8f9aa7]"><span>{billing.data?.length || 0} billing entries currently linked to this matter.</span><a href="/billing" className="font-semibold text-[#d6b65d]">Open Billing Copilot →</a></div>
           </> : <div className="grid min-h-96 place-items-center border border-dashed border-white/15 bg-white/[0.02] p-8 text-center"><div><Sparkles className="mx-auto h-7 w-7 text-[#d6b65d]" /><h2 className="mt-4 font-display text-3xl">No analysis selected</h2><p className="mt-3 max-w-md text-sm leading-relaxed text-[#8f9aa7]">Submit attorney-approved text or analyze a preserved transcript to create a source-grounded matter reading.</p></div></div>}

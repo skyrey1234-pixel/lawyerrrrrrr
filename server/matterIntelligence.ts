@@ -1,4 +1,4 @@
-import { enforceBillingEvidence, isSourceGrounded, type BillingCandidate } from "@shared/billing";
+import { enforceBillingEvidence, hasCompletedWorkEvidence, isSourceGrounded, type BillingCandidate } from "@shared/billing";
 import { invokeLLM } from "./_core/llm";
 
 export const MATTER_AI_MODEL = "gpt-5-mini";
@@ -117,7 +117,7 @@ export async function analyzeMatterText(input: {
     dates: grounded(input.content, parsed.dates),
     actions: grounded(input.content, parsed.actions),
     vocabulary: grounded(input.content, parsed.vocabulary),
-    billing: parsed.billing.map(item => enforceBillingEvidence(input.content, item)).filter((item): item is BillingCandidate => Boolean(item)),
+    billing: parsed.billing.map(item => enforceBillingEvidence(input.content, item)).filter((item): item is BillingCandidate => Boolean(item)).filter(item => hasCompletedWorkEvidence(item.sourceQuote)),
   };
   return {
     result,

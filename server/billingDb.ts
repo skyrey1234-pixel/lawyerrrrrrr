@@ -7,12 +7,14 @@ import {
   billingExports,
   billingTimers,
   documentVersions,
+  firmBillingCodes,
   matters,
   sourceDocuments,
   users,
 } from "../drizzle/schema";
 import { normalizedBillingFingerprint } from "@shared/billing";
 import type { MatterIntelligenceResult } from "./matterIntelligence";
+import { resolveBillingCode } from "./billingCodesDb";
 import { appendAudit, assertMatterAccess, assertSessionAccess, getMembership } from "./counselscribeDb";
 import { getDb } from "./db";
 
@@ -127,7 +129,7 @@ export async function getMatterIntelligence(userId: number, matterId: number) {
   return { documents, runs, items };
 }
 
-export async function reviewAnalysisItem(userId: number, input: { itemId: number; status: "accepted" | "rejected" }) {
+export async function reviewAnalysisItem(userId: number, input: { itemId: number; status: "accepted" | "rejected"; billingCodeId?: number }) {
   const db = await requireDb();
   const rows = await db.select({ item: aiAnalysisItems, run: aiAnalysisRuns, matter: matters }).from(aiAnalysisItems).innerJoin(aiAnalysisRuns, eq(aiAnalysisItems.analysisRunId, aiAnalysisRuns.id)).innerJoin(matters, eq(aiAnalysisRuns.matterId, matters.id)).where(eq(aiAnalysisItems.id, input.itemId)).limit(1);
   if (!rows[0]) throw new Error("AI item not found");
@@ -138,12 +140,14 @@ export async function reviewAnalysisItem(userId: number, input: { itemId: number
     const metadata = (rows[0].item.metadata || {}) as { durationSeconds?: number | null };
     const source = await db.select().from(sourceDocuments).where(eq(sourceDocuments.id, rows[0].run.sourceDocumentId)).limit(1);
     if (!source[0]) throw new Error("The billing candidate source could not be loaded");
+    const firmCode = await resolveBillingCode(userId, { billingCodeId: input.billingCodeId, category: rows[0].item.label });
     billingEntryId = await createBillingEntry(userId, {
       matterId: rows[0].matter.id,
       sessionId: source[0].sessionId ?? undefined,
       sourceDocumentId: source[0].id,
       analysisRunId: rows[0].run.id,
-      activityCode: rows[0].item.label,
+      billingCodeId: firmCode?.id,
+      activityCode: firmCode?.code ?? rows[0].item.label,
       narrative: rows[0].item.value,
       durationSeconds: metadata.durationSeconds ?? null,
       durationSource: metadata.durationSeconds == null ? "none" : "explicit_statement",
@@ -154,7 +158,7 @@ export async function reviewAnalysisItem(userId: number, input: { itemId: number
     });
   }
   await db.update(aiAnalysisItems).set({ status: input.status, reviewedByUserId: userId, reviewedAt: new Date() }).where(eq(aiAnalysisItems.id, input.itemId));
-  await appendAudit({ firmId: access.membership.firm.id, actorUserId: userId, matterId: rows[0].matter.id, eventType: `matter_ai.item_${input.status}`, resourceType: "ai_analysis_item", resourceId: String(input.itemId), metadata: { itemType: rows[0].item.itemType, billingEntryId } });
+  await appendAudit({ firmId: access.membership.firm.id, actorUserId: userId, matterId: rows[0].matter.id, eventType: `matter_ai.item_${input.status}`, resourceType: "ai_analysis_item", resourceId: String(input.itemId), metadata: { itemType: rows[0].item.itemType, billingEntryId, billingCodeId: input.billingCodeId } });
   return { success: true as const, status: input.status, billingEntryId };
 }
 
@@ -164,6 +168,7 @@ export async function createBillingEntry(userId: number, input: {
   sourceDocumentId?: number;
   analysisRunId?: number;
   timerId?: number;
+  billingCodeId?: number;
   workDate?: Date;
   activityCode: string;
   narrative: string;
@@ -178,8 +183,10 @@ export async function createBillingEntry(userId: number, input: {
 }) {
   const access = await assertMatterAccess(userId, input.matterId);
   const db = await requireDb();
+  const firmCode = input.billingCodeId ? await resolveBillingCode(userId, { billingCodeId: input.billingCodeId }) : null;
+  const activityCode = firmCode?.code ?? input.activityCode;
   const workDate = input.workDate ?? new Date();
-  const fingerprint = sha256(normalizedBillingFingerprint({ firmId: access.membership.firm.id, matterId: input.matterId, activityCode: input.activityCode, narrative: input.narrative, workDate, durationSeconds: input.durationSeconds ?? null, sourceIdentifier: input.sourceIdentifier }));
+  const fingerprint = sha256(normalizedBillingFingerprint({ firmId: access.membership.firm.id, matterId: input.matterId, activityCode, narrative: input.narrative, workDate, durationSeconds: input.durationSeconds ?? null, sourceIdentifier: input.sourceIdentifier }));
   const duplicate = await db.select({ id: billingEntries.id }).from(billingEntries).where(and(eq(billingEntries.firmId, access.membership.firm.id), eq(billingEntries.duplicateFingerprint, fingerprint), ne(billingEntries.status, "rejected"))).limit(1);
   const status = input.durationSeconds && input.durationSeconds > 0 ? "draft" : "needs_duration";
   const [{ id }] = await db.insert(billingEntries).values({
@@ -190,8 +197,9 @@ export async function createBillingEntry(userId: number, input: {
     sourceDocumentId: input.sourceDocumentId,
     analysisRunId: input.analysisRunId,
     timerId: input.timerId,
+    billingCodeId: firmCode?.id,
     workDate,
-    activityCode: input.activityCode,
+    activityCode,
     narrative: input.narrative,
     durationSeconds: input.durationSeconds,
     durationSource: input.durationSource,
@@ -216,7 +224,7 @@ export async function listBillingEntries(userId: number, input?: { matterId?: nu
   const conditions = [eq(billingEntries.firmId, membership.firm.id)];
   if (input?.matterId) conditions.push(eq(billingEntries.matterId, input.matterId));
   if (input?.status) conditions.push(eq(billingEntries.status, input.status));
-  return db.select({ entry: billingEntries, matter: matters, attorney: users }).from(billingEntries).innerJoin(matters, eq(billingEntries.matterId, matters.id)).innerJoin(users, eq(billingEntries.userId, users.id)).where(and(...conditions)).orderBy(desc(billingEntries.workDate), desc(billingEntries.createdAt));
+  return db.select({ entry: billingEntries, matter: matters, attorney: users, billingCode: firmBillingCodes }).from(billingEntries).innerJoin(matters, eq(billingEntries.matterId, matters.id)).innerJoin(users, eq(billingEntries.userId, users.id)).leftJoin(firmBillingCodes, eq(billingEntries.billingCodeId, firmBillingCodes.id)).where(and(...conditions)).orderBy(desc(billingEntries.workDate), desc(billingEntries.createdAt));
 }
 
 async function getBillingEntryAccess(userId: number, entryId: number) {
@@ -227,13 +235,15 @@ async function getBillingEntryAccess(userId: number, entryId: number) {
   return { ...rows[0], access };
 }
 
-export async function updateBillingEntry(userId: number, input: { entryId: number; activityCode: string; narrative: string; durationSeconds: number | null; workDate: Date }) {
+export async function updateBillingEntry(userId: number, input: { entryId: number; billingCodeId?: number; activityCode: string; narrative: string; durationSeconds: number | null; workDate: Date }) {
   const { entry, matter, access } = await getBillingEntryAccess(userId, input.entryId);
   if (entry.status === "exported") throw new Error("Exported billing entries cannot be edited");
   const db = await requireDb();
-  const fingerprint = sha256(normalizedBillingFingerprint({ firmId: access.membership.firm.id, matterId: matter.id, activityCode: input.activityCode, narrative: input.narrative, workDate: input.workDate, durationSeconds: input.durationSeconds, sourceIdentifier: entry.sourceIdentifier }));
+  const firmCode = input.billingCodeId ? await resolveBillingCode(userId, { billingCodeId: input.billingCodeId }) : null;
+  const activityCode = firmCode?.code ?? input.activityCode;
+  const fingerprint = sha256(normalizedBillingFingerprint({ firmId: access.membership.firm.id, matterId: matter.id, activityCode, narrative: input.narrative, workDate: input.workDate, durationSeconds: input.durationSeconds, sourceIdentifier: entry.sourceIdentifier }));
   const duplicate = await db.select({ id: billingEntries.id }).from(billingEntries).where(and(eq(billingEntries.firmId, access.membership.firm.id), eq(billingEntries.duplicateFingerprint, fingerprint), ne(billingEntries.id, entry.id), ne(billingEntries.status, "rejected"))).limit(1);
-  await db.update(billingEntries).set({ activityCode: input.activityCode, narrative: input.narrative, durationSeconds: input.durationSeconds, durationSource: input.durationSeconds == null ? "none" : entry.durationSource === "none" ? "manual" : entry.durationSource, workDate: input.workDate, status: input.durationSeconds && input.durationSeconds > 0 ? "draft" : "needs_duration", approvedByUserId: null, approvedAt: null, duplicateFingerprint: fingerprint, duplicateOfEntryId: duplicate[0]?.id ?? null }).where(eq(billingEntries.id, entry.id));
+  await db.update(billingEntries).set({ billingCodeId: firmCode?.id ?? null, activityCode, narrative: input.narrative, durationSeconds: input.durationSeconds, durationSource: input.durationSeconds == null ? "none" : entry.durationSource === "none" ? "manual" : entry.durationSource, workDate: input.workDate, status: input.durationSeconds && input.durationSeconds > 0 ? "draft" : "needs_duration", approvedByUserId: null, approvedAt: null, duplicateFingerprint: fingerprint, duplicateOfEntryId: duplicate[0]?.id ?? null }).where(eq(billingEntries.id, entry.id));
   await appendAudit({ firmId: access.membership.firm.id, actorUserId: userId, matterId: matter.id, eventType: "billing.entry_updated", resourceType: "billing_entry", resourceId: String(entry.id), metadata: { durationSeconds: input.durationSeconds, duplicateOfEntryId: duplicate[0]?.id } });
 }
 
@@ -250,16 +260,18 @@ export async function getActiveTimer(userId: number) {
   const membership = await getMembership(userId);
   if (!membership) return null;
   const db = await requireDb();
-  const rows = await db.select({ timer: billingTimers, matter: matters }).from(billingTimers).innerJoin(matters, eq(billingTimers.matterId, matters.id)).where(and(eq(billingTimers.userId, userId), eq(billingTimers.firmId, membership.firm.id), eq(billingTimers.status, "running"))).orderBy(desc(billingTimers.startedAt)).limit(1);
+  const rows = await db.select({ timer: billingTimers, matter: matters, billingCode: firmBillingCodes }).from(billingTimers).innerJoin(matters, eq(billingTimers.matterId, matters.id)).leftJoin(firmBillingCodes, eq(billingTimers.billingCodeId, firmBillingCodes.id)).where(and(eq(billingTimers.userId, userId), eq(billingTimers.firmId, membership.firm.id), eq(billingTimers.status, "running"))).orderBy(desc(billingTimers.startedAt)).limit(1);
   return rows[0] ?? null;
 }
 
-export async function startBillingTimer(userId: number, input: { matterId: number; activityCode: string; narrative: string; sessionId?: number }) {
+export async function startBillingTimer(userId: number, input: { matterId: number; billingCodeId?: number; activityCode: string; narrative: string; sessionId?: number }) {
   const access = await assertMatterAccess(userId, input.matterId);
   if (await getActiveTimer(userId)) throw new Error("Stop the active timer before starting another matter");
   const db = await requireDb();
-  const [{ id }] = await db.insert(billingTimers).values({ firmId: access.membership.firm.id, matterId: input.matterId, userId, sessionId: input.sessionId, activityCode: input.activityCode, narrative: input.narrative, status: "running", startedAt: new Date() }).$returningId();
-  await appendAudit({ firmId: access.membership.firm.id, actorUserId: userId, matterId: input.matterId, sessionId: input.sessionId, eventType: "billing.timer_started", resourceType: "billing_timer", resourceId: String(id), metadata: { activityCode: input.activityCode } });
+  const firmCode = input.billingCodeId ? await resolveBillingCode(userId, { billingCodeId: input.billingCodeId }) : null;
+  const activityCode = firmCode?.code ?? input.activityCode;
+  const [{ id }] = await db.insert(billingTimers).values({ firmId: access.membership.firm.id, matterId: input.matterId, userId, sessionId: input.sessionId, billingCodeId: firmCode?.id, activityCode, narrative: input.narrative, status: "running", startedAt: new Date() }).$returningId();
+  await appendAudit({ firmId: access.membership.firm.id, actorUserId: userId, matterId: input.matterId, sessionId: input.sessionId, eventType: "billing.timer_started", resourceType: "billing_timer", resourceId: String(id), metadata: { activityCode, billingCodeId: firmCode?.id } });
   return id;
 }
 
@@ -269,7 +281,7 @@ export async function stopBillingTimer(userId: number, timerId: number) {
   const elapsedSeconds = Math.max(1, Math.round((Date.now() - active.timer.startedAt.getTime()) / 1000));
   const db = await requireDb();
   await db.update(billingTimers).set({ status: "stopped", stoppedAt: new Date(), elapsedSeconds }).where(eq(billingTimers.id, timerId));
-  const entryId = await createBillingEntry(userId, { matterId: active.timer.matterId, sessionId: active.timer.sessionId ?? undefined, timerId, activityCode: active.timer.activityCode, narrative: active.timer.narrative, durationSeconds: elapsedSeconds, durationSource: "timer", sourceType: "timer", sourceIdentifier: `timer:${timerId}` });
+  const entryId = await createBillingEntry(userId, { matterId: active.timer.matterId, sessionId: active.timer.sessionId ?? undefined, timerId, billingCodeId: active.timer.billingCodeId ?? undefined, activityCode: active.timer.activityCode, narrative: active.timer.narrative, durationSeconds: elapsedSeconds, durationSource: "timer", sourceType: "timer", sourceIdentifier: `timer:${timerId}` });
   return { entryId, elapsedSeconds };
 }
 
@@ -287,7 +299,7 @@ export async function getApprovedEntriesForExport(userId: number, entryIds: numb
   if (!membership) throw new Error("Firm membership is required");
   if (!entryIds.length) throw new Error("Select at least one approved entry");
   const db = await requireDb();
-  const rows = await db.select({ entry: billingEntries, matter: matters, attorney: users }).from(billingEntries).innerJoin(matters, eq(billingEntries.matterId, matters.id)).innerJoin(users, eq(billingEntries.userId, users.id)).where(and(eq(billingEntries.firmId, membership.firm.id), eq(billingEntries.status, "approved"), inArray(billingEntries.id, entryIds)));
+  const rows = await db.select({ entry: billingEntries, matter: matters, attorney: users, billingCode: firmBillingCodes }).from(billingEntries).innerJoin(matters, eq(billingEntries.matterId, matters.id)).innerJoin(users, eq(billingEntries.userId, users.id)).leftJoin(firmBillingCodes, eq(billingEntries.billingCodeId, firmBillingCodes.id)).where(and(eq(billingEntries.firmId, membership.firm.id), eq(billingEntries.status, "approved"), inArray(billingEntries.id, entryIds)));
   if (rows.length !== entryIds.length) throw new Error("Every selected billing entry must be approved and belong to this firm");
   return { membership, rows };
 }

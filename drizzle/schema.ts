@@ -382,6 +382,30 @@ export const aiAnalysisItems = mysqlTable(
   table => [index("ai_analysis_items_run_type_idx").on(table.analysisRunId, table.itemType)],
 );
 
+export const firmBillingCodes = mysqlTable(
+  "firm_billing_codes",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    firmId: int("firmId").notNull().references(() => firms.id),
+    code: varchar("code", { length: 40 }).notNull(),
+    label: varchar("label", { length: 180 }).notNull(),
+    category: varchar("category", { length: 80 }).notNull(),
+    description: text("description"),
+    defaultNarrative: text("defaultNarrative"),
+    displayOrder: int("displayOrder").default(0).notNull(),
+    active: boolean("active").default(true).notNull(),
+    createdByUserId: int("createdByUserId").notNull().references(() => users.id),
+    updatedByUserId: int("updatedByUserId").references(() => users.id),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [
+    uniqueIndex("firm_billing_codes_firm_code_unique").on(table.firmId, table.code),
+    index("firm_billing_codes_firm_active_order_idx").on(table.firmId, table.active, table.displayOrder),
+    index("firm_billing_codes_firm_category_idx").on(table.firmId, table.category),
+  ],
+);
+
 export const billingTimers = mysqlTable(
   "billing_timers",
   {
@@ -390,6 +414,7 @@ export const billingTimers = mysqlTable(
     matterId: int("matterId").notNull().references(() => matters.id),
     userId: int("userId").notNull().references(() => users.id),
     sessionId: int("sessionId").references(() => dictationSessions.id),
+    billingCodeId: int("billingCodeId").references(() => firmBillingCodes.id),
     activityCode: varchar("activityCode", { length: 80 }).notNull(),
     narrative: text("narrative").notNull(),
     status: mysqlEnum("status", ["running", "stopped", "cancelled"]).default("running").notNull(),
@@ -416,6 +441,7 @@ export const billingEntries = mysqlTable(
     sourceDocumentId: int("sourceDocumentId").references(() => sourceDocuments.id),
     analysisRunId: int("analysisRunId").references(() => aiAnalysisRuns.id),
     timerId: int("timerId").references(() => billingTimers.id),
+    billingCodeId: int("billingCodeId").references(() => firmBillingCodes.id),
     workDate: timestamp("workDate").defaultNow().notNull(),
     activityCode: varchar("activityCode", { length: 80 }).notNull(),
     narrative: text("narrative").notNull(),
@@ -494,5 +520,6 @@ export type AuditEvent = typeof auditEvents.$inferSelect;
 export type SourceDocument = typeof sourceDocuments.$inferSelect;
 export type AiAnalysisRun = typeof aiAnalysisRuns.$inferSelect;
 export type AiAnalysisItem = typeof aiAnalysisItems.$inferSelect;
+export type FirmBillingCode = typeof firmBillingCodes.$inferSelect;
 export type BillingTimer = typeof billingTimers.$inferSelect;
 export type BillingEntry = typeof billingEntries.$inferSelect;

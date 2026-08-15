@@ -12,13 +12,14 @@ type BillingExportRow = {
   };
   matter: { matterNumber: string; clientName: string; name: string };
   attorney: { name: string | null; email: string | null };
+  billingCode: { code: string; label: string; category: string } | null;
 };
 
 const csv = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`;
 
 export function buildBillingCsv(rows: BillingExportRow[]) {
-  const header = ["Entry ID", "Work Date", "Client", "Matter Number", "Matter", "Attorney", "Attorney Email", "Activity", "Duration Seconds", "Exact Hours", "Narrative", "Duration Source", "Source Type", "Source Evidence", "Approval Status"];
-  const lines = rows.map(({ entry, matter, attorney }) => [
+  const header = ["Entry ID", "Work Date", "Client", "Matter Number", "Matter", "Attorney", "Attorney Email", "Firm Billing Code", "Billing Code Label", "Billing Category", "Historical Activity", "Duration Seconds", "Exact Hours", "Narrative", "Duration Source", "Source Type", "Source Evidence", "Approval Status"];
+  const lines = rows.map(({ entry, matter, attorney, billingCode }) => [
     entry.id,
     entry.workDate.toISOString().slice(0, 10),
     matter.clientName,
@@ -26,6 +27,9 @@ export function buildBillingCsv(rows: BillingExportRow[]) {
     matter.name,
     attorney.name,
     attorney.email,
+    billingCode?.code ?? entry.activityCode,
+    billingCode?.label ?? "",
+    billingCode?.category ?? "",
     entry.activityCode,
     entry.durationSeconds,
     entry.durationSeconds == null ? "" : (entry.durationSeconds / 3600).toFixed(4),

@@ -7,7 +7,9 @@ describe("billing CSV", () => {
       entry: { id: 7, workDate: new Date("2026-08-15T12:00:00Z"), activityCode: "REVIEW", narrative: 'Review discovery, including "Exhibit A"', durationSeconds: 1440, durationSource: "explicit_statement", sourceType: "voice", sourceQuote: "I spent 24 minutes reviewing discovery.", status: "approved" },
       matter: { matterNumber: "FL-100", clientName: "Hartwell", name: "Hartwell v. Jones" },
       attorney: { name: "Alex Counsel", email: "alex@example.com" },
+      billingCode: { code: "L-110", label: "Review discovery", category: "REVIEW" },
     }]);
+    expect(output).toContain('"L-110","Review discovery","REVIEW","REVIEW"');
     expect(output).toContain('"1440","0.4000"');
     expect(output).toContain('"Review discovery, including ""Exhibit A"""');
     expect(output).toContain('"approved"');

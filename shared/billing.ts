@@ -60,6 +60,14 @@ export function isSourceGrounded(source: string, quote: string) {
   return normalizedQuote.length >= 4 && normalizedEvidence(source).includes(normalizedQuote);
 }
 
+export function hasCompletedWorkEvidence(quote: string) {
+  const value = normalizedEvidence(quote);
+  if (parseExplicitDurationSeconds(value) != null) return true;
+  const actor = /\b(i|we|our team|attorney|counsel|lawyer|paralegal|he|she)\b/i;
+  const completedWork = /\b(reviewed|analyzed|researched|drafted|prepared|revised|wrote|emailed|called|conferred|attended|appeared|filed|negotiated|traveled|worked|met|presented)\b/i;
+  return actor.test(value) && completedWork.test(value);
+}
+
 export function enforceBillingEvidence(source: string, candidate: BillingCandidate): BillingCandidate | null {
   if (!isSourceGrounded(source, candidate.sourceQuote)) return null;
   const verifiedDuration = parseExplicitDurationSeconds(candidate.sourceQuote);
