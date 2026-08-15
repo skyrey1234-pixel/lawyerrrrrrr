@@ -316,6 +316,151 @@ export const localCompanions = mysqlTable(
   table => [index("local_companions_firm_idx").on(table.firmId)],
 );
 
+export const sourceDocuments = mysqlTable(
+  "source_documents",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    firmId: int("firmId").notNull().references(() => firms.id),
+    matterId: int("matterId").notNull().references(() => matters.id),
+    sessionId: int("sessionId").references(() => dictationSessions.id),
+    createdByUserId: int("createdByUserId").notNull().references(() => users.id),
+    title: varchar("title", { length: 240 }).notNull(),
+    sourceType: mysqlEnum("sourceType", ["pasted_text", "transcript", "uploaded_text"]).notNull(),
+    mimeType: varchar("mimeType", { length: 120 }),
+    originalFileName: varchar("originalFileName", { length: 255 }),
+    storageKey: varchar("storageKey", { length: 512 }),
+    storageUrl: text("storageUrl"),
+    contentSnapshot: text("contentSnapshot").notNull(),
+    contentHash: varchar("contentHash", { length: 64 }).notNull(),
+    characterCount: int("characterCount").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [
+    index("source_documents_matter_created_idx").on(table.matterId, table.createdAt),
+    index("source_documents_session_idx").on(table.sessionId),
+  ],
+);
+
+export const aiAnalysisRuns = mysqlTable(
+  "ai_analysis_runs",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    firmId: int("firmId").notNull().references(() => firms.id),
+    matterId: int("matterId").notNull().references(() => matters.id),
+    sourceDocumentId: int("sourceDocumentId").notNull().references(() => sourceDocuments.id),
+    createdByUserId: int("createdByUserId").notNull().references(() => users.id),
+    modelId: varchar("modelId", { length: 120 }).notNull(),
+    promptVersion: varchar("promptVersion", { length: 80 }).notNull(),
+    status: mysqlEnum("status", ["running", "completed", "failed"]).default("running").notNull(),
+    summary: text("summary"),
+    resultJson: json("resultJson").$type<Record<string, unknown>>(),
+    inputTokens: int("inputTokens"),
+    outputTokens: int("outputTokens"),
+    errorMessage: text("errorMessage"),
+    completedAt: timestamp("completedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [index("ai_analysis_runs_matter_created_idx").on(table.matterId, table.createdAt)],
+);
+
+export const aiAnalysisItems = mysqlTable(
+  "ai_analysis_items",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    analysisRunId: int("analysisRunId").notNull().references(() => aiAnalysisRuns.id),
+    itemType: mysqlEnum("itemType", ["fact", "entity", "date", "deadline", "action", "vocabulary", "billing"]).notNull(),
+    label: varchar("label", { length: 240 }).notNull(),
+    value: text("value").notNull(),
+    sourceQuote: text("sourceQuote").notNull(),
+    confidence: decimal("confidence", { precision: 5, scale: 4 }),
+    status: mysqlEnum("status", ["proposed", "accepted", "rejected"]).default("proposed").notNull(),
+    metadata: json("metadata").$type<Record<string, unknown>>(),
+    reviewedByUserId: int("reviewedByUserId").references(() => users.id),
+    reviewedAt: timestamp("reviewedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [index("ai_analysis_items_run_type_idx").on(table.analysisRunId, table.itemType)],
+);
+
+export const billingTimers = mysqlTable(
+  "billing_timers",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    firmId: int("firmId").notNull().references(() => firms.id),
+    matterId: int("matterId").notNull().references(() => matters.id),
+    userId: int("userId").notNull().references(() => users.id),
+    sessionId: int("sessionId").references(() => dictationSessions.id),
+    activityCode: varchar("activityCode", { length: 80 }).notNull(),
+    narrative: text("narrative").notNull(),
+    status: mysqlEnum("status", ["running", "stopped", "cancelled"]).default("running").notNull(),
+    startedAt: timestamp("startedAt").defaultNow().notNull(),
+    stoppedAt: timestamp("stoppedAt"),
+    elapsedSeconds: int("elapsedSeconds"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [
+    index("billing_timers_user_status_idx").on(table.userId, table.status),
+    index("billing_timers_matter_idx").on(table.matterId),
+  ],
+);
+
+export const billingEntries = mysqlTable(
+  "billing_entries",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    firmId: int("firmId").notNull().references(() => firms.id),
+    matterId: int("matterId").notNull().references(() => matters.id),
+    userId: int("userId").notNull().references(() => users.id),
+    sessionId: int("sessionId").references(() => dictationSessions.id),
+    sourceDocumentId: int("sourceDocumentId").references(() => sourceDocuments.id),
+    analysisRunId: int("analysisRunId").references(() => aiAnalysisRuns.id),
+    timerId: int("timerId").references(() => billingTimers.id),
+    workDate: timestamp("workDate").defaultNow().notNull(),
+    activityCode: varchar("activityCode", { length: 80 }).notNull(),
+    narrative: text("narrative").notNull(),
+    durationSeconds: int("durationSeconds"),
+    durationSource: mysqlEnum("durationSource", ["timer", "explicit_statement", "manual", "none"]).default("none").notNull(),
+    sourceType: mysqlEnum("sourceType", ["timer", "voice", "transcript", "document", "manual"]).notNull(),
+    sourceIdentifier: varchar("sourceIdentifier", { length: 180 }),
+    sourceQuote: text("sourceQuote"),
+    sourceStartMs: int("sourceStartMs"),
+    sourceEndMs: int("sourceEndMs"),
+    status: mysqlEnum("status", ["needs_duration", "draft", "approved", "rejected", "exported"]).default("needs_duration").notNull(),
+    confidence: decimal("confidence", { precision: 5, scale: 4 }),
+    duplicateFingerprint: varchar("duplicateFingerprint", { length: 64 }).notNull(),
+    duplicateOfEntryId: int("duplicateOfEntryId"),
+    approvedByUserId: int("approvedByUserId").references(() => users.id),
+    approvedAt: timestamp("approvedAt"),
+    rejectedAt: timestamp("rejectedAt"),
+    exportedAt: timestamp("exportedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [
+    index("billing_entries_firm_status_idx").on(table.firmId, table.status),
+    index("billing_entries_matter_work_idx").on(table.matterId, table.workDate),
+    index("billing_entries_fingerprint_idx").on(table.duplicateFingerprint),
+  ],
+);
+
+export const billingExports = mysqlTable(
+  "billing_exports",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    firmId: int("firmId").notNull().references(() => firms.id),
+    createdByUserId: int("createdByUserId").notNull().references(() => users.id),
+    format: mysqlEnum("format", ["csv"]).default("csv").notNull(),
+    fileName: varchar("fileName", { length: 255 }).notNull(),
+    storageKey: varchar("storageKey", { length: 512 }).notNull(),
+    storageUrl: text("storageUrl").notNull(),
+    entryIds: json("entryIds").$type<number[]>().notNull(),
+    entryCount: int("entryCount").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [index("billing_exports_firm_created_idx").on(table.firmId, table.createdAt)],
+);
+
 export const auditEvents = mysqlTable(
   "audit_events",
   {
@@ -346,3 +491,8 @@ export type TranscriptSegment = typeof transcriptSegments.$inferSelect;
 export type DocumentVersion = typeof documentVersions.$inferSelect;
 export type GlossaryTerm = typeof glossaryTerms.$inferSelect;
 export type AuditEvent = typeof auditEvents.$inferSelect;
+export type SourceDocument = typeof sourceDocuments.$inferSelect;
+export type AiAnalysisRun = typeof aiAnalysisRuns.$inferSelect;
+export type AiAnalysisItem = typeof aiAnalysisItems.$inferSelect;
+export type BillingTimer = typeof billingTimers.$inferSelect;
+export type BillingEntry = typeof billingEntries.$inferSelect;

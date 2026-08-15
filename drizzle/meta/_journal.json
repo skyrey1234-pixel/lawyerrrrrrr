@@ -8,6 +8,13 @@
       "when": 1786823214544,
       "tag": "0000_mixed_bullseye",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1786830723623,
+      "tag": "0001_glossy_millenium_guard",
+      "breakpoints": true
     }
   ]
 }

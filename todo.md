@@ -35,3 +35,22 @@
 - [x] Re-run tests, build, end-to-end checks, and responsive verification after closing these gaps.
 - [x] Run a deterministic authenticated live-audio persistence fixture and verify the stored session, source type, processing mode, and audio object reference in the database and UI.
 - [x] Run a deterministic MediaRecorder start-stop-blob-cleanup test and verify its metadata feeds the same authenticated live-session persistence payload.
+
+## AI Matter Intelligence and Billing Copilot
+
+- [x] Document the billing evidence rule: AI may classify work and draft narratives, but time must come from an explicit attorney statement or a running timer.
+- [x] Add source documents, AI analysis runs, billing timers, billing entries, approvals, and export history to the database.
+- [x] Add protected backend procedures for document intake, transcript analysis, timer control, billing review, approval, rejection, and export.
+- [x] Implement structured AI extraction for summaries, facts, people, dates, deadlines, action items, vocabulary, and candidate billable work with source quotations.
+- [x] Let attorneys paste matter text or analyze an existing transcript and review every extracted item before saving it to the matter.
+- [x] Add matter-linked live timers with one active timer per attorney and exact elapsed-time capture.
+- [x] Detect explicit billing statements in dictation, including stated duration, task category, narrative, client, and matter.
+- [x] Mark AI-detected work without explicit time as `needs duration` instead of inventing billable time.
+- [x] Create a billing review ledger with draft, approved, rejected, and exported states plus duplicate detection.
+- [x] Add CSV billing export with client, matter, attorney, activity, duration, narrative, source, and approval metadata.
+- [x] Add navigation and dashboards for Matter AI and Billing Copilot while preserving the Litigator’s Desk design.
+- [x] Verify source grounding, timer calculations, billing guardrails, duplicate prevention, authorization, responsive behavior, tests, and production build.
+- [x] Save and deliver the AI billing-copilot checkpoint.
+- [x] Keep AI-extracted findings and billing candidates staged as proposed records until an attorney accepts or rejects each item.
+- [x] Create a billing-ledger entry only when an attorney accepts a staged billing candidate; reject without linking it.
+- [x] Validate pasted-text and transcript review decisions end to end and confirm staged, accepted, and rejected persistence in both the UI and database.

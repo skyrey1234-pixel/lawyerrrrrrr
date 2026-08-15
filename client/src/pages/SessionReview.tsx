@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { applyCleanupRule, buildCleanupSuggestions } from "@/lib/legalEngine";
 import { trpc } from "@/lib/trpc";
 import { parseReviewVoiceCommand } from "@shared/counselscribe";
-import { Check, Clock3, FileClock, FileDown, History, Mic2, Play, RotateCcw, Save, ShieldAlert, Sparkles, Square, Undo2, X } from "lucide-react";
+import { BrainCircuit, Check, Clock3, FileClock, FileDown, History, Mic2, Play, RotateCcw, Save, ShieldAlert, Sparkles, Square, Undo2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -80,6 +80,7 @@ export default function SessionReview({ sessionId }: { sessionId: number }) {
   const saveReviewed = trpc.sessions.saveReviewed.useMutation({ onSuccess: async () => { await utils.sessions.get.invalidate({ sessionId }); toast.success("Reviewed version saved."); }, onError: error => toast.error(error.message) });
   const restoreVersion = trpc.sessions.restoreVersion.useMutation({ onSuccess: async result => { await utils.sessions.get.invalidate({ sessionId }); setInitializedVersionId(result.id); toast.success(`Version ${result.versionNumber} created from the selected history.`); }, onError: error => toast.error(error.message) });
   const exportDocx = trpc.sessions.exportDocx.useMutation({ onSuccess: async data => { const link = document.createElement("a"); link.href = data.url; link.download = data.fileName; link.click(); await utils.sessions.get.invalidate({ sessionId }); toast.success("Word-ready attorney draft generated."); }, onError: error => toast.error(error.message) });
+  const analyzeWork = trpc.intelligence.analyzeTranscript.useMutation({ onSuccess: async data => { await utils.intelligence.get.invalidate({ matterId: session.data!.matter.id }); toast.success(`Matter AI staged ${data.itemCount} source-grounded items and ${data.stagedBillingCount} billing candidates. Review them in Matter AI before anything enters billing.`); }, onError: error => toast.error(error.message) });
 
   useEffect(() => {
     setVoiceSuggestionIndex(current => Math.min(current, Math.max(0, openSuggestions.length - 1)));
@@ -219,12 +220,12 @@ export default function SessionReview({ sessionId }: { sessionId: number }) {
 
   return (
     <PageFrame>
-      <PageHeader eyebrow={`${data.matter.matterNumber} · ${data.session.sourceType} session`} title={data.session.title} description={`${data.matter.name}. Every proposed cleanup remains attorney-controlled and every saved state becomes a separate version.`} backTo="/sessions" actions={<><ProcessingBadge mode={data.session.processingMode} />{data.audio && data.session.processingMode === "hosted" && ["uploaded", "failed"].includes(data.session.status) ? <Button className="bg-[#d6b65d] text-[#07111d]" disabled={transcribe.isPending} onClick={() => transcribe.mutate({ sessionId })}>{transcribe.isPending ? "Transcribing…" : <><Sparkles className="mr-2 h-4 w-4" /> Start hosted transcription</>}</Button> : null}</>} />
+      <PageHeader eyebrow={`${data.matter.matterNumber} · ${data.session.sourceType} session`} title={data.session.title} description={`${data.matter.name}. Every proposed cleanup remains attorney-controlled and every saved state becomes a separate version.`} backTo="/sessions" actions={<><ProcessingBadge mode={data.session.processingMode} />{hasSource ? <Button variant="outline" className="border-white/15 bg-transparent" disabled={analyzeWork.isPending} onClick={() => analyzeWork.mutate({ matterId: data.matter.id, sessionId, title: `Work and billing · ${data.session.title}` })}>{analyzeWork.isPending ? "Reading transcript…" : <><BrainCircuit className="mr-2 h-4 w-4" /> Extract work & billing</>}</Button> : null}{data.audio && data.session.processingMode === "hosted" && ["uploaded", "failed"].includes(data.session.status) ? <Button className="bg-[#d6b65d] text-[#07111d]" disabled={transcribe.isPending} onClick={() => transcribe.mutate({ sessionId })}>{transcribe.isPending ? "Transcribing…" : <><Sparkles className="mr-2 h-4 w-4" /> Start hosted transcription</>}</Button> : null}</>} />
 
       {data.session.processingMode === "local" && data.session.status === "uploaded" ? <div className="mb-6 flex items-start gap-3 border-l-2 border-[#d6b65d] bg-[#d6b65d]/8 p-4 text-sm text-[#d8ca9f]"><ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" /><p><strong>Waiting for local companion.</strong> The audio is stored, but no transcription request will be sent until the Mac mini service is installed and verified.</p></div> : null}
       {data.session.status === "failed" ? <div className="mb-6 border-l-2 border-[#a4564d] bg-[#a4564d]/10 p-4 text-sm text-[#e2aaa3]">{data.session.errorMessage}</div> : null}
 
-      <div className="grid gap-6 2xl:grid-cols-[330px_minmax(0,1fr)_360px]">
+      <div className="grid gap-6 xl:grid-cols-[290px_minmax(0,1fr)_320px] 2xl:grid-cols-[330px_minmax(0,1fr)_360px]">
         <aside className="space-y-5">
           <section className="border border-white/10 bg-[#0a1827] p-5">
             <SectionHeading label="Source record" title="Audio & segments" />

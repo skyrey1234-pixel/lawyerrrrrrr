@@ -11,8 +11,10 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import DashboardLayout from "./components/DashboardLayout";
 import Admin from "./pages/Admin";
 import Audit from "./pages/Audit";
+import BillingCopilot from "./pages/BillingCopilot";
 import Compare from "./pages/Compare";
 import MatterDetail from "./pages/MatterDetail";
+import MatterIntelligence from "./pages/MatterIntelligence";
 import Matters from "./pages/Matters";
 import PilotDashboard from "./pages/PilotDashboard";
 import SessionReview from "./pages/SessionReview";
@@ -29,6 +31,8 @@ function Router() {
       <Route path="/sessions/:sessionId">{params => <Protected><SessionReview sessionId={Number(params.sessionId)} /></Protected>}</Route>
       <Route path="/matters"><Protected><Matters /></Protected></Route>
       <Route path="/sessions"><Protected><Sessions /></Protected></Route>
+      <Route path="/intelligence"><Protected><MatterIntelligence /></Protected></Route>
+      <Route path="/billing"><Protected><BillingCopilot /></Protected></Route>
       <Route path="/compare"><Protected><Compare /></Protected></Route>
       <Route path="/audit"><Protected><Audit /></Protected></Route>
       <Route path="/admin"><Protected><Admin /></Protected></Route>

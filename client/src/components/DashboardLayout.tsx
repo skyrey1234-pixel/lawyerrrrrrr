@@ -23,6 +23,8 @@ import { startLogin } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import {
   AudioLines,
+  BadgeDollarSign,
+  BrainCircuit,
   BriefcaseBusiness,
   ClipboardList,
   GitCompareArrows,
@@ -41,6 +43,8 @@ const menuItems = [
   { icon: LayoutDashboard, label: "Command center", path: "/" },
   { icon: BriefcaseBusiness, label: "Matters", path: "/matters" },
   { icon: AudioLines, label: "Sessions", path: "/sessions" },
+  { icon: BrainCircuit, label: "Matter AI", path: "/intelligence" },
+  { icon: BadgeDollarSign, label: "Billing Copilot", path: "/billing" },
   { icon: GitCompareArrows, label: "Dragon comparison", path: "/compare" },
   { icon: ClipboardList, label: "Audit history", path: "/audit" },
   { icon: ShieldCheck, label: "Firm controls", path: "/admin" },
