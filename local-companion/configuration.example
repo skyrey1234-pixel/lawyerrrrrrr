@@ -1,0 +1,8 @@
+# Copy these names into a local, uncommitted file named .env on the Mac mini.
+# Replace every placeholder before starting the service.
+COUNSELSCRIBE_FIRM_ID=replace-with-firm-id
+COUNSELSCRIBE_SHARED_SECRET=replace-with-a-random-secret-at-least-32-characters
+COUNSELSCRIBE_MODEL=mlx-community/whisper-large-v3-turbo
+COUNSELSCRIBE_BIND=127.0.0.1
+COUNSELSCRIBE_PORT=8765
+
