@@ -4,7 +4,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
-import { Check, CircleOff, Plus, Save, Tags } from "lucide-react";
+import { parseBillingCodeImport } from "@shared/billingCodeImport";
+import { UTBMS_LITIGATION_SOURCE_URL, UTBMS_LITIGATION_STARTER } from "@shared/utbmsStarter";
+import { Check, CircleOff, FileUp, Plus, Save, Tags } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -33,6 +35,7 @@ export function BillingCodeSettings({ canAdminister }: { canAdminister: boolean 
   const codes = trpc.billing.codes.list.useQuery({ includeInactive: true });
   const [createDraft, setCreateDraft] = useState<CodeDraft>(emptyDraft);
   const [drafts, setDrafts] = useState<Record<number, CodeDraft>>({});
+  const [importText, setImportText] = useState("");
 
   useEffect(() => {
     if (!codes.data) return;
@@ -58,6 +61,11 @@ export function BillingCodeSettings({ canAdminister }: { canAdminister: boolean 
     onSuccess: async () => { await refresh(); toast.success("Billing code updated."); },
     onError: error => toast.error(error.message),
   });
+  const importCodes = trpc.billing.codes.bulkUpsert.useMutation({
+    onSuccess: async data => { setImportText(""); await refresh(); toast.success(`${data.count} firm billing codes imported or updated.`); },
+    onError: error => toast.error(error.message),
+  });
+  const importPreview = parseBillingCodeImport(importText);
 
   const updateDraft = (id: number, patch: Partial<CodeDraft>) => setDrafts(current => ({ ...current, [id]: { ...current[id], ...patch } }));
   const submitCreate = () => createCode.mutate({
@@ -78,6 +86,8 @@ export function BillingCodeSettings({ canAdminister }: { canAdminister: boolean 
     <section className="border border-white/10 bg-[#0a1827] p-6">
       <SectionHeading label="Billing configuration" title="Firm billing codes" />
       <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[#8d99a6]">Define the codes attorneys select while timing, speaking, reviewing AI candidates, and exporting approved work. Inactive codes stay on historical entries but cannot be used for new work.</p>
+
+      <div className="mt-6 border border-white/10 bg-white/[0.02] p-5"><div className="flex items-center gap-2 text-[#d6b65d]"><FileUp className="h-4 w-4" /><span className="font-mono text-[10px] font-bold uppercase tracking-[0.15em]">Import the firm’s real list</span></div><p className="mt-2 text-xs leading-relaxed text-[#8d99a6]">Paste CSV or tab-separated rows. Supported columns: <code>code,label,category,description,defaultNarrative,displayOrder,active</code>. Existing codes with the same normalized code are updated; missing values are never invented.</p><Textarea value={importText} onChange={event => setImportText(event.target.value)} placeholder={'code,label,category,description,defaultNarrative,displayOrder,active\nL-110,Review and analysis,REVIEW,Use for substantive review,Review and analyze matter materials,10,true'} className="mt-4 min-h-36 border-white/10 bg-[#06111d] font-mono text-xs" />{importText ? <div className="mt-3 flex flex-wrap items-center gap-3 text-xs"><span className="text-[#b9c8ad]">{importPreview.items.length} valid row{importPreview.items.length === 1 ? "" : "s"}</span>{importPreview.errors.length ? <span className="text-[#dc978e]">{importPreview.errors.slice(0, 3).join(" · ")}</span> : <span className="text-[#8f9aa7]">Ready for administrator review</span>}</div> : null}<div className="mt-4 flex flex-wrap gap-2"><Button className="bg-[#d6b65d] text-[#07111d]" disabled={!canAdminister || !importPreview.items.length || Boolean(importPreview.errors.length) || importCodes.isPending} onClick={() => importCodes.mutate({ items: importPreview.items })}><FileUp className="mr-2 h-4 w-4" /> Import {importPreview.items.length || "real"} codes</Button><Button variant="outline" className="border-[#d6b65d]/30 bg-transparent" disabled={!canAdminister || importCodes.isPending} onClick={() => importCodes.mutate({ items: [...UTBMS_LITIGATION_STARTER] })}><Tags className="mr-2 h-4 w-4" /> Load 29-code UTBMS starter</Button></div><p className="mt-3 text-[10px] leading-relaxed text-[#7f8b98]">The starter is the public 1997 ABA Litigation Task Code set reproduced by the LEDES Oversight Committee. It is labeled public—not firm-customized. <a className="text-[#d6b65d] underline" href={UTBMS_LITIGATION_SOURCE_URL} target="_blank" rel="noreferrer">Review source</a>.</p></div>
 
       <div className="mt-6 border border-[#d6b65d]/20 bg-[#d6b65d]/5 p-5">
         <div className="flex items-center gap-2 text-[#d6b65d]"><Plus className="h-4 w-4" /><span className="font-mono text-[10px] font-bold uppercase tracking-[0.15em]">Create firm code</span></div>
@@ -113,4 +123,3 @@ export function BillingCodeSettings({ canAdminister }: { canAdminister: boolean 
     </section>
   );
 }
-

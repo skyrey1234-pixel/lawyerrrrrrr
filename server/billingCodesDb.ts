@@ -107,3 +107,35 @@ export async function resolveBillingCode(userId: number, input: { billingCodeId?
   const rows = await db.select().from(firmBillingCodes).where(and(eq(firmBillingCodes.firmId, membership.firm.id), eq(firmBillingCodes.category, category), eq(firmBillingCodes.active, true))).orderBy(asc(firmBillingCodes.displayOrder), asc(firmBillingCodes.id)).limit(1);
   return rows[0] ?? null;
 }
+
+export async function bulkUpsertFirmBillingCodes(userId: number, items: Array<{
+  code: string;
+  label: string;
+  category: string;
+  description?: string;
+  defaultNarrative?: string;
+  displayOrder: number;
+  active: boolean;
+}>) {
+  const membership = await requireAdministrator(userId);
+  const db = await requireDb();
+  const normalized = items.map(item => ({
+    firmId: membership.firm.id,
+    code: validateBillingCode(item.code),
+    label: item.label.trim(),
+    category: normalizeBillingCategory(item.category),
+    description: item.description?.trim() || null,
+    defaultNarrative: item.defaultNarrative?.trim() || null,
+    displayOrder: item.displayOrder,
+    active: item.active,
+    createdByUserId: userId,
+    updatedByUserId: userId,
+  }));
+  const duplicate = normalized.find((item, index) => normalized.findIndex(other => other.code === item.code) !== index);
+  if (duplicate) throw new Error(`Billing code ${duplicate.code} appears more than once in the import`);
+  for (const item of normalized) {
+    await db.insert(firmBillingCodes).values(item).onDuplicateKeyUpdate({ set: { label: item.label, category: item.category, description: item.description, defaultNarrative: item.defaultNarrative, displayOrder: item.displayOrder, active: item.active, updatedByUserId: userId } });
+  }
+  await appendAudit({ firmId: membership.firm.id, actorUserId: userId, eventType: "billing.codes_imported", resourceType: "firm_billing_code", resourceId: "bulk", metadata: { count: normalized.length, codes: normalized.map(item => item.code) } });
+  return { count: normalized.length };
+}

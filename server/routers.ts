@@ -5,6 +5,7 @@ import { publicProcedure, router } from "./_core/trpc";
 import { comparisonsRouter } from "./routers/comparisons";
 import { billingRouter } from "./routers/billing";
 import { intelligenceRouter } from "./routers/intelligence";
+import { integrationsRouter } from "./routers/integrations";
 import { mattersRouter } from "./routers/matters";
 import { sessionsRouter } from "./routers/sessions";
 import { workspaceRouter } from "./routers/workspace";
@@ -28,6 +29,7 @@ export const appRouter = router({
   comparisons: comparisonsRouter,
   intelligence: intelligenceRouter,
   billing: billingRouter,
+  integrations: integrationsRouter,
 });
 
 export type AppRouter = typeof appRouter;

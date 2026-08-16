@@ -1,0 +1,1 @@
+ALTER TABLE `billing_entries` ADD `rateStatus` enum('missing','applied','override','not_applicable') DEFAULT 'missing' NOT NULL;

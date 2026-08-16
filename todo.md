@@ -72,3 +72,27 @@
 - [x] Run a transcript-derived explicit-duration work sample, confirm its staged billing card displays the mapped firm code, and preserve UI plus database evidence.
 - [x] Reject a firm-code-mapped staged billing candidate and verify no billing ledger row is created or linked.
 - [x] Deactivate CS-REV, confirm it is unavailable for new timers, manual drafts, and AI candidate acceptance, and confirm historical CS-REV ledger and export records still display correctly before reactivation.
+
+## Lawyer Rates and Practice-Management Sync
+
+- [x] Document rate precedence, effective dates, historical rate snapshots, rounding rules, and attorney-approval boundaries.
+- [x] Add lawyer rate cards with hourly rate, currency, effective date, active status, and administrator-only management.
+- [x] Snapshot the applied lawyer rate and calculated fee on every billing entry so later rate changes do not rewrite history.
+- [x] Apply rates and exact fee calculations to timers, explicit-duration drafts, AI candidates, manual entries, ledger totals, and CSV exports.
+- [ ] Obtain and import the firm’s private billing-code list when the firm supplies it; do not mislabel public codes as private firm data.
+- [x] Map imported public UTBMS codes to AI extraction, timers, manual drafts, staged review, historical records, and exports while preserving private-code import support.
+- [x] Retest Matter AI with an authorized transcript and controlled work note; verify exact UTBMS mapping, explicit duration, benchmark fee math, future-work separation, and attorney staging.
+- [x] Inspect current connector availability and official Clio and MyCase integration requirements before choosing the supported connection path.
+- [x] Add encrypted Clio connection settings, matter mapping, approved time-entry sync, idempotency keys, sync states, and audit history.
+- [x] Add encrypted MyCase connection settings, matter mapping, approved time-entry sync, idempotency keys, sync states, and audit history.
+- [x] Require explicit attorney confirmation before each external Clio or MyCase synchronization action.
+- [x] Verify permissions, rate math, historical immutability, code mapping, duplicate prevention, sync failure handling, responsive layouts, tests, build, and fresh runtime logs.
+- [x] Save and deliver the lawyer-rate, public UTBMS starter, and Clio/MyCase integration-foundation checkpoint.
+- [x] Source an authoritative public UTBMS or LEDES litigation billing-code taxonomy and preserve source URLs and publication context.
+- [x] Import the public billing taxonomy as a clearly labeled starter library, never as a claim about the firm’s private custom codes.
+- [x] Source current published attorney-rate benchmark data relevant to the firm’s geography or practice context and document methodology and limitations.
+- [x] Store any public rate value as a benchmark recommendation requiring administrator adoption, never as an active lawyer rate by default.
+- [x] Retest Matter AI against the authorized transcript using the imported public code taxonomy and verify attorney-controlled mapping.
+- [ ] Add the firm’s actual lawyer accounts and effective rates when names, emails, and approved rates are supplied.
+- [ ] Complete live Clio OAuth and a confirmed remote time-entry post when provider-issued credentials are supplied.
+- [ ] Complete live MyCase OAuth and a confirmed remote time-entry post when provider-issued credentials are supplied.

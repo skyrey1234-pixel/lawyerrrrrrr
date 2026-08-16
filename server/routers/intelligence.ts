@@ -11,12 +11,14 @@ import {
 } from "../billingDb";
 import { assertMatterAccess } from "../counselscribeDb";
 import { analyzeMatterText, MATTER_AI_MODEL, MATTER_AI_PROMPT_VERSION } from "../matterIntelligence";
+import { listFirmBillingCodes } from "../billingCodesDb";
 
 async function runAnalysis(userId: number, input: { matterId: number; sourceDocumentId: number; content: string }) {
   const access = await assertMatterAccess(userId, input.matterId);
+  const billingCodes = await listFirmBillingCodes(userId, false);
   const run = await createAnalysisRun(userId, { matterId: input.matterId, sourceDocumentId: input.sourceDocumentId, modelId: MATTER_AI_MODEL, promptVersion: MATTER_AI_PROMPT_VERSION });
   try {
-    const analyzed = await analyzeMatterText({ matterName: access.matter.name, matterNumber: access.matter.matterNumber, clientName: access.matter.clientName, jurisdiction: access.matter.jurisdiction, content: input.content });
+    const analyzed = await analyzeMatterText({ matterName: access.matter.name, matterNumber: access.matter.matterNumber, clientName: access.matter.clientName, jurisdiction: access.matter.jurisdiction, content: input.content, billingCodes: billingCodes.map(code => ({ code: code.code, label: code.label, description: code.description })) });
     const completed = await completeAnalysisRun(userId, { analysisRunId: run.id, modelId: analyzed.modelId, result: analyzed.result, inputTokens: analyzed.inputTokens, outputTokens: analyzed.outputTokens });
     return { analysisRunId: run.id, ...completed };
   } catch (error) {

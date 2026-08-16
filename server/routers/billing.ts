@@ -14,7 +14,8 @@ import {
   updateBillingEntry,
 } from "../billingDb";
 import { buildBillingCsv } from "../billingCsv";
-import { createFirmBillingCode, listFirmBillingCodes, updateFirmBillingCode } from "../billingCodesDb";
+import { bulkUpsertFirmBillingCodes, createFirmBillingCode, listFirmBillingCodes, updateFirmBillingCode } from "../billingCodesDb";
+import { createLawyerRate, listLawyerRates, updateLawyerRate } from "../ratesDb";
 import { storagePut } from "../storage";
 
 const activityCode = z.string().trim().min(1).max(80);
@@ -28,10 +29,43 @@ const billingCodeFields = z.object({
 });
 
 export const billingRouter = router({
+  rates: router({
+    list: protectedProcedure.input(z.object({ includeInactive: z.boolean().default(true) }).optional()).query(({ ctx, input }) => listLawyerRates(ctx.user.id, input?.includeInactive ?? true)),
+    create: protectedProcedure.input(z.object({
+      membershipId: z.number().int().positive(),
+      hourlyRateCents: z.number().int().min(0).max(10_000_000),
+      currency: z.literal("USD").default("USD"),
+      effectiveFromMs: z.number().int().positive(),
+      effectiveToMs: z.number().int().positive().nullable().optional(),
+      notes: z.string().trim().max(2000).optional(),
+    })).mutation(async ({ ctx, input }) => ({ id: await createLawyerRate(ctx.user.id, {
+      membershipId: input.membershipId,
+      hourlyRateCents: input.hourlyRateCents,
+      currency: input.currency,
+      effectiveFrom: new Date(input.effectiveFromMs),
+      effectiveTo: input.effectiveToMs ? new Date(input.effectiveToMs) : null,
+      notes: input.notes,
+    }) })),
+    update: protectedProcedure.input(z.object({
+      id: z.number().int().positive(),
+      effectiveToMs: z.number().int().positive().nullable().optional(),
+      notes: z.string().trim().max(2000).optional(),
+      active: z.boolean(),
+    })).mutation(async ({ ctx, input }) => {
+      await updateLawyerRate(ctx.user.id, {
+        id: input.id,
+        effectiveTo: input.effectiveToMs ? new Date(input.effectiveToMs) : null,
+        notes: input.notes,
+        active: input.active,
+      });
+      return { success: true as const };
+    }),
+  }),
   codes: router({
     list: protectedProcedure.input(z.object({ includeInactive: z.boolean().default(false) }).optional()).query(({ ctx, input }) => listFirmBillingCodes(ctx.user.id, input?.includeInactive ?? false)),
     create: protectedProcedure.input(billingCodeFields).mutation(async ({ ctx, input }) => ({ id: await createFirmBillingCode(ctx.user.id, input) })),
     update: protectedProcedure.input(billingCodeFields.extend({ id: z.number().int().positive(), active: z.boolean() })).mutation(async ({ ctx, input }) => { await updateFirmBillingCode(ctx.user.id, input); return { success: true as const }; }),
+    bulkUpsert: protectedProcedure.input(z.object({ items: z.array(billingCodeFields.extend({ active: z.boolean() })).min(1).max(500) })).mutation(({ ctx, input }) => bulkUpsertFirmBillingCodes(ctx.user.id, input.items)),
   }),
   list: protectedProcedure.input(z.object({ matterId: z.number().int().positive().optional(), status: z.enum(["needs_duration", "draft", "approved", "rejected", "exported"]).optional() }).optional()).query(({ ctx, input }) => listBillingEntries(ctx.user.id, input)),
   activeTimer: protectedProcedure.query(({ ctx }) => getActiveTimer(ctx.user.id)),

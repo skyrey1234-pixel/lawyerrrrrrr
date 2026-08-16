@@ -17,6 +17,7 @@ import type { MatterIntelligenceResult } from "./matterIntelligence";
 import { resolveBillingCode } from "./billingCodesDb";
 import { appendAudit, assertMatterAccess, assertSessionAccess, getMembership } from "./counselscribeDb";
 import { getDb } from "./db";
+import { feeSnapshot, resolveRateSnapshot } from "./ratesDb";
 
 async function requireDb() {
   const db = await getDb();
@@ -180,19 +181,27 @@ export async function createBillingEntry(userId: number, input: {
   sourceStartMs?: number;
   sourceEndMs?: number;
   confidence?: number;
+  billingUserId?: number;
+  billable?: boolean;
 }) {
   const access = await assertMatterAccess(userId, input.matterId);
   const db = await requireDb();
   const firmCode = input.billingCodeId ? await resolveBillingCode(userId, { billingCodeId: input.billingCodeId }) : null;
   const activityCode = firmCode?.code ?? input.activityCode;
   const workDate = input.workDate ?? new Date();
+  const billingUserId = input.billingUserId ?? userId;
+  const billable = input.billable ?? true;
+  const resolvedRate = billable
+    ? await resolveRateSnapshot(access.membership.firm.id, billingUserId, workDate)
+    : null;
+  const calculated = feeSnapshot(input.durationSeconds, resolvedRate?.hourlyRateCents, billable);
   const fingerprint = sha256(normalizedBillingFingerprint({ firmId: access.membership.firm.id, matterId: input.matterId, activityCode, narrative: input.narrative, workDate, durationSeconds: input.durationSeconds ?? null, sourceIdentifier: input.sourceIdentifier }));
   const duplicate = await db.select({ id: billingEntries.id }).from(billingEntries).where(and(eq(billingEntries.firmId, access.membership.firm.id), eq(billingEntries.duplicateFingerprint, fingerprint), ne(billingEntries.status, "rejected"))).limit(1);
   const status = input.durationSeconds && input.durationSeconds > 0 ? "draft" : "needs_duration";
   const [{ id }] = await db.insert(billingEntries).values({
     firmId: access.membership.firm.id,
     matterId: input.matterId,
-    userId,
+    userId: billingUserId,
     sessionId: input.sessionId,
     sourceDocumentId: input.sourceDocumentId,
     analysisRunId: input.analysisRunId,
@@ -201,6 +210,7 @@ export async function createBillingEntry(userId: number, input: {
     workDate,
     activityCode,
     narrative: input.narrative,
+    billable,
     durationSeconds: input.durationSeconds,
     durationSource: input.durationSource,
     sourceType: input.sourceType,
@@ -208,12 +218,20 @@ export async function createBillingEntry(userId: number, input: {
     sourceQuote: input.sourceQuote,
     sourceStartMs: input.sourceStartMs,
     sourceEndMs: input.sourceEndMs,
+    currency: resolvedRate?.currency ?? "USD",
+    rateCardId: resolvedRate?.id,
+    rateCents: resolvedRate?.hourlyRateCents,
+    feeCents: calculated.feeCents,
+    rateStatus: calculated.rateStatus,
+    rateSource: resolvedRate ? "lawyer_rate" : "none",
+    rateEffectiveFrom: resolvedRate?.effectiveFrom,
+    rateSnapshotAt: new Date(),
     status,
     confidence: input.confidence == null ? null : String(input.confidence),
     duplicateFingerprint: fingerprint,
     duplicateOfEntryId: duplicate[0]?.id,
   }).$returningId();
-  await appendAudit({ firmId: access.membership.firm.id, actorUserId: userId, matterId: input.matterId, sessionId: input.sessionId, eventType: "billing.entry_created", resourceType: "billing_entry", resourceId: String(id), metadata: { status, durationSource: input.durationSource, duplicateOfEntryId: duplicate[0]?.id } });
+  await appendAudit({ firmId: access.membership.firm.id, actorUserId: userId, matterId: input.matterId, sessionId: input.sessionId, eventType: "billing.entry_created", resourceType: "billing_entry", resourceId: String(id), metadata: { status, durationSource: input.durationSource, duplicateOfEntryId: duplicate[0]?.id, billingUserId, rateStatus: calculated.rateStatus, rateCardId: resolvedRate?.id ?? null, feeCents: calculated.feeCents } });
   return id;
 }
 
@@ -241,16 +259,19 @@ export async function updateBillingEntry(userId: number, input: { entryId: numbe
   const db = await requireDb();
   const firmCode = input.billingCodeId ? await resolveBillingCode(userId, { billingCodeId: input.billingCodeId }) : null;
   const activityCode = firmCode?.code ?? input.activityCode;
+  const resolvedRate = entry.billable ? await resolveRateSnapshot(access.membership.firm.id, entry.userId, input.workDate) : null;
+  const calculated = feeSnapshot(input.durationSeconds, resolvedRate?.hourlyRateCents, entry.billable);
   const fingerprint = sha256(normalizedBillingFingerprint({ firmId: access.membership.firm.id, matterId: matter.id, activityCode, narrative: input.narrative, workDate: input.workDate, durationSeconds: input.durationSeconds, sourceIdentifier: entry.sourceIdentifier }));
   const duplicate = await db.select({ id: billingEntries.id }).from(billingEntries).where(and(eq(billingEntries.firmId, access.membership.firm.id), eq(billingEntries.duplicateFingerprint, fingerprint), ne(billingEntries.id, entry.id), ne(billingEntries.status, "rejected"))).limit(1);
-  await db.update(billingEntries).set({ billingCodeId: firmCode?.id ?? null, activityCode, narrative: input.narrative, durationSeconds: input.durationSeconds, durationSource: input.durationSeconds == null ? "none" : entry.durationSource === "none" ? "manual" : entry.durationSource, workDate: input.workDate, status: input.durationSeconds && input.durationSeconds > 0 ? "draft" : "needs_duration", approvedByUserId: null, approvedAt: null, duplicateFingerprint: fingerprint, duplicateOfEntryId: duplicate[0]?.id ?? null }).where(eq(billingEntries.id, entry.id));
-  await appendAudit({ firmId: access.membership.firm.id, actorUserId: userId, matterId: matter.id, eventType: "billing.entry_updated", resourceType: "billing_entry", resourceId: String(entry.id), metadata: { durationSeconds: input.durationSeconds, duplicateOfEntryId: duplicate[0]?.id } });
+  await db.update(billingEntries).set({ billingCodeId: firmCode?.id ?? null, activityCode, narrative: input.narrative, durationSeconds: input.durationSeconds, durationSource: input.durationSeconds == null ? "none" : entry.durationSource === "none" ? "manual" : entry.durationSource, workDate: input.workDate, status: input.durationSeconds && input.durationSeconds > 0 ? "draft" : "needs_duration", approvedByUserId: null, approvedAt: null, rateCardId: resolvedRate?.id ?? null, currency: resolvedRate?.currency ?? "USD", rateCents: resolvedRate?.hourlyRateCents ?? null, feeCents: calculated.feeCents, rateStatus: calculated.rateStatus, rateSource: resolvedRate ? "lawyer_rate" : "none", rateEffectiveFrom: resolvedRate?.effectiveFrom ?? null, rateSnapshotAt: new Date(), rateOverrideReason: null, revision: entry.revision + 1, duplicateFingerprint: fingerprint, duplicateOfEntryId: duplicate[0]?.id ?? null }).where(eq(billingEntries.id, entry.id));
+  await appendAudit({ firmId: access.membership.firm.id, actorUserId: userId, matterId: matter.id, eventType: "billing.entry_updated", resourceType: "billing_entry", resourceId: String(entry.id), metadata: { durationSeconds: input.durationSeconds, duplicateOfEntryId: duplicate[0]?.id, rateStatus: calculated.rateStatus, rateCardId: resolvedRate?.id ?? null, feeCents: calculated.feeCents, revision: entry.revision + 1 } });
 }
 
 export async function reviewBillingEntry(userId: number, entryId: number, decision: "approved" | "rejected") {
   const { entry, matter, access } = await getBillingEntryAccess(userId, entryId);
   if (entry.status === "exported") throw new Error("Exported billing entries cannot be changed");
   if (decision === "approved" && (!entry.durationSeconds || entry.durationSeconds <= 0)) throw new Error("Add verified time before approval");
+  if (decision === "approved" && entry.billable && (entry.rateStatus === "missing" || entry.rateCents == null || entry.feeCents == null)) throw new Error("Assign an effective lawyer rate before approval");
   const db = await requireDb();
   await db.update(billingEntries).set(decision === "approved" ? { status: "approved", approvedByUserId: userId, approvedAt: new Date(), rejectedAt: null } : { status: "rejected", rejectedAt: new Date(), approvedByUserId: null, approvedAt: null }).where(eq(billingEntries.id, entry.id));
   await appendAudit({ firmId: access.membership.firm.id, actorUserId: userId, matterId: matter.id, eventType: `billing.entry_${decision}`, resourceType: "billing_entry", resourceId: String(entry.id) });
@@ -270,8 +291,10 @@ export async function startBillingTimer(userId: number, input: { matterId: numbe
   const db = await requireDb();
   const firmCode = input.billingCodeId ? await resolveBillingCode(userId, { billingCodeId: input.billingCodeId }) : null;
   const activityCode = firmCode?.code ?? input.activityCode;
-  const [{ id }] = await db.insert(billingTimers).values({ firmId: access.membership.firm.id, matterId: input.matterId, userId, sessionId: input.sessionId, billingCodeId: firmCode?.id, activityCode, narrative: input.narrative, status: "running", startedAt: new Date() }).$returningId();
-  await appendAudit({ firmId: access.membership.firm.id, actorUserId: userId, matterId: input.matterId, sessionId: input.sessionId, eventType: "billing.timer_started", resourceType: "billing_timer", resourceId: String(id), metadata: { activityCode, billingCodeId: firmCode?.id } });
+  const startedAt = new Date();
+  const rate = await resolveRateSnapshot(access.membership.firm.id, userId, startedAt);
+  const [{ id }] = await db.insert(billingTimers).values({ firmId: access.membership.firm.id, matterId: input.matterId, userId, sessionId: input.sessionId, billingCodeId: firmCode?.id, rateCardId: rate?.id, rateCentsSnapshot: rate?.hourlyRateCents, currency: rate?.currency ?? "USD", activityCode, narrative: input.narrative, status: "running", startedAt }).$returningId();
+  await appendAudit({ firmId: access.membership.firm.id, actorUserId: userId, matterId: input.matterId, sessionId: input.sessionId, eventType: "billing.timer_started", resourceType: "billing_timer", resourceId: String(id), metadata: { activityCode, billingCodeId: firmCode?.id, rateCardId: rate?.id ?? null, rateCents: rate?.hourlyRateCents ?? null } });
   return id;
 }
 
@@ -281,7 +304,7 @@ export async function stopBillingTimer(userId: number, timerId: number) {
   const elapsedSeconds = Math.max(1, Math.round((Date.now() - active.timer.startedAt.getTime()) / 1000));
   const db = await requireDb();
   await db.update(billingTimers).set({ status: "stopped", stoppedAt: new Date(), elapsedSeconds }).where(eq(billingTimers.id, timerId));
-  const entryId = await createBillingEntry(userId, { matterId: active.timer.matterId, sessionId: active.timer.sessionId ?? undefined, timerId, billingCodeId: active.timer.billingCodeId ?? undefined, activityCode: active.timer.activityCode, narrative: active.timer.narrative, durationSeconds: elapsedSeconds, durationSource: "timer", sourceType: "timer", sourceIdentifier: `timer:${timerId}` });
+  const entryId = await createBillingEntry(userId, { matterId: active.timer.matterId, sessionId: active.timer.sessionId ?? undefined, timerId, billingCodeId: active.timer.billingCodeId ?? undefined, activityCode: active.timer.activityCode, narrative: active.timer.narrative, durationSeconds: elapsedSeconds, durationSource: "timer", sourceType: "timer", sourceIdentifier: `timer:${timerId}`, workDate: active.timer.startedAt });
   return { entryId, elapsedSeconds };
 }
 
@@ -301,6 +324,7 @@ export async function getApprovedEntriesForExport(userId: number, entryIds: numb
   const db = await requireDb();
   const rows = await db.select({ entry: billingEntries, matter: matters, attorney: users, billingCode: firmBillingCodes }).from(billingEntries).innerJoin(matters, eq(billingEntries.matterId, matters.id)).innerJoin(users, eq(billingEntries.userId, users.id)).leftJoin(firmBillingCodes, eq(billingEntries.billingCodeId, firmBillingCodes.id)).where(and(eq(billingEntries.firmId, membership.firm.id), eq(billingEntries.status, "approved"), inArray(billingEntries.id, entryIds)));
   if (rows.length !== entryIds.length) throw new Error("Every selected billing entry must be approved and belong to this firm");
+  if (rows.some(row => row.entry.billable && (row.entry.rateStatus === "missing" || row.entry.rateCents == null || row.entry.feeCents == null))) throw new Error("Every billable entry needs an applied lawyer rate before export");
   return { membership, rows };
 }
 

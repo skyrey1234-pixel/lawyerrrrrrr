@@ -7,4 +7,8 @@ export const ENV = {
   isProduction: process.env.NODE_ENV === "production",
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
+  clioClientId: process.env.CLIO_CLIENT_ID ?? "",
+  clioClientSecret: process.env.CLIO_CLIENT_SECRET ?? "",
+  mycaseClientId: process.env.MYCASE_CLIENT_ID ?? "",
+  mycaseClientSecret: process.env.MYCASE_CLIENT_SECRET ?? "",
 };

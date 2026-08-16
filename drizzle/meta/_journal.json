@@ -22,6 +22,20 @@
       "when": 1786835880554,
       "tag": "0002_special_nicolaos",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1786840864818,
+      "tag": "0003_clammy_wolfpack",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1786841089381,
+      "tag": "0004_rich_bedlam",
+      "breakpoints": true
     }
   ]
 }

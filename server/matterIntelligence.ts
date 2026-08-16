@@ -35,7 +35,10 @@ const evidenceProperties = {
 
 const evidenceRequired = ["label", "value", "sourceQuote", "confidence"];
 
-const responseSchema = {
+const broadActivityCodes = ["COMMUNICATION", "DRAFTING", "REVIEW", "RESEARCH", "COURT", "NEGOTIATION", "ADMIN", "OTHER"];
+
+function responseSchemaForCodes(codes: string[]) {
+  return {
   type: "object",
   properties: {
     summary: { type: "string" },
@@ -49,7 +52,7 @@ const responseSchema = {
       items: {
         type: "object",
         properties: {
-          activityCode: { type: "string", enum: ["COMMUNICATION", "DRAFTING", "REVIEW", "RESEARCH", "COURT", "NEGOTIATION", "ADMIN", "OTHER"] },
+          activityCode: { type: "string", enum: codes.length ? codes : broadActivityCodes },
           narrative: { type: "string" },
           sourceQuote: { type: "string", description: "An exact quotation proving the work occurred" },
           explicitDurationText: { type: "string", description: "Exact stated duration or an empty string" },
@@ -63,7 +66,8 @@ const responseSchema = {
   },
   required: ["summary", "facts", "entities", "dates", "actions", "vocabulary", "billing"],
   additionalProperties: false,
-};
+  };
+}
 
 function grounded<T extends { sourceQuote: string }>(source: string, items: T[]) {
   return items.filter(item => isSourceGrounded(source, item.sourceQuote));
@@ -75,7 +79,9 @@ export async function analyzeMatterText(input: {
   clientName: string;
   jurisdiction: string;
   content: string;
+  billingCodes?: Array<{ code: string; label: string; description?: string | null }>;
 }) {
+  const codeCatalog = (input.billingCodes ?? []).map(item => `${item.code}: ${item.label}${item.description ? ` — ${item.description}` : ""}`).join("\n");
   const response = await invokeLLM({
     model: MATTER_AI_MODEL,
     messages: [
@@ -89,16 +95,17 @@ export async function analyzeMatterText(input: {
           "Never estimate duration. If the source does not explicitly state numeric hours or minutes, use empty explicitDurationText and null durationSeconds.",
           "Action items must include only unfinished, requested, or future work. Do not classify completed work as an action item.",
           "Draft concise professional billing narratives in task style without embellishment.",
+          input.billingCodes?.length ? "For each billing candidate, select exactly one activityCode from the supplied active billing-code catalog. Do not invent or alter a code." : "Use the available broad activity categories for billing candidates.",
         ].join(" "),
       },
       {
         role: "user",
-        content: `Matter: ${input.matterName}\nMatter number: ${input.matterNumber}\nClient: ${input.clientName}\nJurisdiction: ${input.jurisdiction}\n\nSOURCE TEXT\n${input.content}`,
+        content: `Matter: ${input.matterName}\nMatter number: ${input.matterNumber}\nClient: ${input.clientName}\nJurisdiction: ${input.jurisdiction}${codeCatalog ? `\n\nACTIVE BILLING-CODE CATALOG\n${codeCatalog}` : ""}\n\nSOURCE TEXT\n${input.content}`,
       },
     ],
     response_format: {
       type: "json_schema",
-      json_schema: { name: "counselscribe_matter_intelligence", strict: true, schema: responseSchema },
+      json_schema: { name: "counselscribe_matter_intelligence", strict: true, schema: responseSchemaForCodes((input.billingCodes ?? []).map(item => item.code)) },
     },
   });
 

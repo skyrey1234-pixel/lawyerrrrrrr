@@ -68,6 +68,30 @@ export const firmMemberships = mysqlTable(
   ],
 );
 
+export const lawyerRateCards = mysqlTable(
+  "lawyer_rate_cards",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    firmId: int("firmId").notNull().references(() => firms.id),
+    membershipId: int("membershipId").notNull().references(() => firmMemberships.id),
+    currency: varchar("currency", { length: 3 }).default("USD").notNull(),
+    hourlyRateCents: int("hourlyRateCents").notNull(),
+    effectiveFrom: timestamp("effectiveFrom").notNull(),
+    effectiveTo: timestamp("effectiveTo"),
+    notes: text("notes"),
+    active: boolean("active").default(true).notNull(),
+    createdByUserId: int("createdByUserId").notNull().references(() => users.id),
+    updatedByUserId: int("updatedByUserId").references(() => users.id),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [
+    uniqueIndex("lawyer_rate_cards_membership_effective_unique").on(table.membershipId, table.effectiveFrom),
+    index("lawyer_rate_cards_firm_active_idx").on(table.firmId, table.active),
+    index("lawyer_rate_cards_membership_period_idx").on(table.membershipId, table.effectiveFrom, table.effectiveTo),
+  ],
+);
+
 export const documentTemplates = mysqlTable(
   "document_templates",
   {
@@ -415,6 +439,9 @@ export const billingTimers = mysqlTable(
     userId: int("userId").notNull().references(() => users.id),
     sessionId: int("sessionId").references(() => dictationSessions.id),
     billingCodeId: int("billingCodeId").references(() => firmBillingCodes.id),
+    rateCardId: int("rateCardId").references(() => lawyerRateCards.id),
+    rateCentsSnapshot: int("rateCentsSnapshot"),
+    currency: varchar("currency", { length: 3 }).default("USD").notNull(),
     activityCode: varchar("activityCode", { length: 80 }).notNull(),
     narrative: text("narrative").notNull(),
     status: mysqlEnum("status", ["running", "stopped", "cancelled"]).default("running").notNull(),
@@ -442,9 +469,11 @@ export const billingEntries = mysqlTable(
     analysisRunId: int("analysisRunId").references(() => aiAnalysisRuns.id),
     timerId: int("timerId").references(() => billingTimers.id),
     billingCodeId: int("billingCodeId").references(() => firmBillingCodes.id),
+    rateCardId: int("rateCardId").references(() => lawyerRateCards.id),
     workDate: timestamp("workDate").defaultNow().notNull(),
     activityCode: varchar("activityCode", { length: 80 }).notNull(),
     narrative: text("narrative").notNull(),
+    billable: boolean("billable").default(true).notNull(),
     durationSeconds: int("durationSeconds"),
     durationSource: mysqlEnum("durationSource", ["timer", "explicit_statement", "manual", "none"]).default("none").notNull(),
     sourceType: mysqlEnum("sourceType", ["timer", "voice", "transcript", "document", "manual"]).notNull(),
@@ -452,6 +481,17 @@ export const billingEntries = mysqlTable(
     sourceQuote: text("sourceQuote"),
     sourceStartMs: int("sourceStartMs"),
     sourceEndMs: int("sourceEndMs"),
+    currency: varchar("currency", { length: 3 }).default("USD").notNull(),
+    rateCents: int("rateCents"),
+    feeCents: int("feeCents"),
+    rateStatus: mysqlEnum("rateStatus", ["missing", "applied", "override", "not_applicable"])
+      .default("missing")
+      .notNull(),
+    rateSource: mysqlEnum("rateSource", ["lawyer_rate", "manual_override", "none"]).default("none").notNull(),
+    rateEffectiveFrom: timestamp("rateEffectiveFrom"),
+    rateSnapshotAt: timestamp("rateSnapshotAt"),
+    rateOverrideReason: text("rateOverrideReason"),
+    revision: int("revision").default(1).notNull(),
     status: mysqlEnum("status", ["needs_duration", "draft", "approved", "rejected", "exported"]).default("needs_duration").notNull(),
     confidence: decimal("confidence", { precision: 5, scale: 4 }),
     duplicateFingerprint: varchar("duplicateFingerprint", { length: 64 }).notNull(),
@@ -485,6 +525,125 @@ export const billingExports = mysqlTable(
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
   table => [index("billing_exports_firm_created_idx").on(table.firmId, table.createdAt)],
+);
+
+export const integrationConnections = mysqlTable(
+  "integration_connections",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    firmId: int("firmId").notNull().references(() => firms.id),
+    provider: mysqlEnum("provider", ["clio", "mycase"]).notNull(),
+    status: mysqlEnum("status", ["not_configured", "pending", "connected", "error", "disconnected"])
+      .default("not_configured")
+      .notNull(),
+    region: varchar("region", { length: 24 }),
+    externalFirmId: varchar("externalFirmId", { length: 160 }),
+    externalFirmName: varchar("externalFirmName", { length: 240 }),
+    accessTokenCiphertext: text("accessTokenCiphertext"),
+    refreshTokenCiphertext: text("refreshTokenCiphertext"),
+    tokenExpiresAt: timestamp("tokenExpiresAt"),
+    scopes: text("scopes"),
+    lastValidatedAt: timestamp("lastValidatedAt"),
+    lastError: text("lastError"),
+    connectedByUserId: int("connectedByUserId").references(() => users.id),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [
+    uniqueIndex("integration_connections_firm_provider_unique").on(table.firmId, table.provider),
+    index("integration_connections_status_idx").on(table.status),
+  ],
+);
+
+export const externalUserMappings = mysqlTable(
+  "external_user_mappings",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    firmId: int("firmId").notNull().references(() => firms.id),
+    provider: mysqlEnum("provider", ["clio", "mycase"]).notNull(),
+    membershipId: int("membershipId").notNull().references(() => firmMemberships.id),
+    externalUserId: varchar("externalUserId", { length: 160 }).notNull(),
+    externalUserName: varchar("externalUserName", { length: 240 }),
+    active: boolean("active").default(true).notNull(),
+    createdByUserId: int("createdByUserId").notNull().references(() => users.id),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [
+    uniqueIndex("external_user_mappings_provider_membership_unique").on(table.provider, table.membershipId),
+    index("external_user_mappings_firm_provider_idx").on(table.firmId, table.provider),
+  ],
+);
+
+export const externalMatterMappings = mysqlTable(
+  "external_matter_mappings",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    firmId: int("firmId").notNull().references(() => firms.id),
+    provider: mysqlEnum("provider", ["clio", "mycase"]).notNull(),
+    matterId: int("matterId").notNull().references(() => matters.id),
+    externalMatterId: varchar("externalMatterId", { length: 160 }).notNull(),
+    externalMatterNumber: varchar("externalMatterNumber", { length: 160 }),
+    externalMatterName: varchar("externalMatterName", { length: 240 }),
+    active: boolean("active").default(true).notNull(),
+    createdByUserId: int("createdByUserId").notNull().references(() => users.id),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [
+    uniqueIndex("external_matter_mappings_provider_matter_unique").on(table.provider, table.matterId),
+    index("external_matter_mappings_firm_provider_idx").on(table.firmId, table.provider),
+  ],
+);
+
+export const externalBillingCodeMappings = mysqlTable(
+  "external_billing_code_mappings",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    firmId: int("firmId").notNull().references(() => firms.id),
+    provider: mysqlEnum("provider", ["clio", "mycase"]).notNull(),
+    billingCodeId: int("billingCodeId").notNull().references(() => firmBillingCodes.id),
+    externalActivityId: varchar("externalActivityId", { length: 160 }),
+    externalActivityName: varchar("externalActivityName", { length: 240 }),
+    utbmsActivityCode: varchar("utbmsActivityCode", { length: 40 }),
+    utbmsTaskCode: varchar("utbmsTaskCode", { length: 40 }),
+    active: boolean("active").default(true).notNull(),
+    createdByUserId: int("createdByUserId").notNull().references(() => users.id),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [
+    uniqueIndex("external_billing_code_mappings_provider_code_unique").on(table.provider, table.billingCodeId),
+    index("external_billing_code_mappings_firm_provider_idx").on(table.firmId, table.provider),
+  ],
+);
+
+export const billingSyncAttempts = mysqlTable(
+  "billing_sync_attempts",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    firmId: int("firmId").notNull().references(() => firms.id),
+    provider: mysqlEnum("provider", ["clio", "mycase"]).notNull(),
+    connectionId: int("connectionId").notNull().references(() => integrationConnections.id),
+    billingEntryId: int("billingEntryId").notNull().references(() => billingEntries.id),
+    billingEntryRevision: int("billingEntryRevision").notNull(),
+    idempotencyKey: varchar("idempotencyKey", { length: 96 }).notNull(),
+    requestFingerprint: varchar("requestFingerprint", { length: 64 }).notNull(),
+    status: mysqlEnum("status", ["pending", "succeeded", "failed", "skipped"]).default("pending").notNull(),
+    externalRecordId: varchar("externalRecordId", { length: 180 }),
+    responseStatus: int("responseStatus"),
+    errorCode: varchar("errorCode", { length: 100 }),
+    errorMessage: text("errorMessage"),
+    confirmedByUserId: int("confirmedByUserId").notNull().references(() => users.id),
+    confirmedAt: timestamp("confirmedAt").defaultNow().notNull(),
+    completedAt: timestamp("completedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [
+    uniqueIndex("billing_sync_attempts_provider_idempotency_unique").on(table.provider, table.idempotencyKey),
+    index("billing_sync_attempts_entry_provider_idx").on(table.billingEntryId, table.provider),
+    index("billing_sync_attempts_firm_created_idx").on(table.firmId, table.createdAt),
+  ],
 );
 
 export const auditEvents = mysqlTable(
@@ -521,5 +680,8 @@ export type SourceDocument = typeof sourceDocuments.$inferSelect;
 export type AiAnalysisRun = typeof aiAnalysisRuns.$inferSelect;
 export type AiAnalysisItem = typeof aiAnalysisItems.$inferSelect;
 export type FirmBillingCode = typeof firmBillingCodes.$inferSelect;
+export type LawyerRateCard = typeof lawyerRateCards.$inferSelect;
 export type BillingTimer = typeof billingTimers.$inferSelect;
 export type BillingEntry = typeof billingEntries.$inferSelect;
+export type IntegrationConnection = typeof integrationConnections.$inferSelect;
+export type BillingSyncAttempt = typeof billingSyncAttempts.$inferSelect;
