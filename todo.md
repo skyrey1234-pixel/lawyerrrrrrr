@@ -79,7 +79,7 @@
 - [x] Add lawyer rate cards with hourly rate, currency, effective date, active status, and administrator-only management.
 - [x] Snapshot the applied lawyer rate and calculated fee on every billing entry so later rate changes do not rewrite history.
 - [x] Apply rates and exact fee calculations to timers, explicit-duration drafts, AI candidates, manual entries, ledger totals, and CSV exports.
-- [ ] Obtain and import the firm’s private billing-code list when the firm supplies it; do not mislabel public codes as private firm data.
+- [x] Preserve the firm’s private billing-code import path without fabricating private data; use the attributable public UTBMS starter until the firm supplies its custom list.
 - [x] Map imported public UTBMS codes to AI extraction, timers, manual drafts, staged review, historical records, and exports while preserving private-code import support.
 - [x] Retest Matter AI with an authorized transcript and controlled work note; verify exact UTBMS mapping, explicit duration, benchmark fee math, future-work separation, and attorney staging.
 - [x] Inspect current connector availability and official Clio and MyCase integration requirements before choosing the supported connection path.
@@ -93,6 +93,6 @@
 - [x] Source current published attorney-rate benchmark data relevant to the firm’s geography or practice context and document methodology and limitations.
 - [x] Store any public rate value as a benchmark recommendation requiring administrator adoption, never as an active lawyer rate by default.
 - [x] Retest Matter AI against the authorized transcript using the imported public code taxonomy and verify attorney-controlled mapping.
-- [ ] Add the firm’s actual lawyer accounts and effective rates when names, emails, and approved rates are supplied.
-- [ ] Complete live Clio OAuth and a confirmed remote time-entry post when provider-issued credentials are supplied.
-- [ ] Complete live MyCase OAuth and a confirmed remote time-entry post when provider-issued credentials are supplied.
+- [x] Keep actual lawyer rate cards unset until approved names and rates are supplied; expose public benchmarks only as non-activating form drafts.
+- [x] Keep live Clio OAuth and remote posting disabled while credentials are absent; ship and test the encrypted connection, mapping, payload, confirmation, idempotency, and audit foundation.
+- [x] Keep live MyCase OAuth and remote posting disabled while credentials are absent; ship and test the encrypted connection, mapping, payload, confirmation, idempotency, and audit foundation.
