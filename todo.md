@@ -96,3 +96,14 @@
 - [x] Keep actual lawyer rate cards unset until approved names and rates are supplied; expose public benchmarks only as non-activating form drafts.
 - [x] Keep live Clio OAuth and remote posting disabled while credentials are absent; ship and test the encrypted connection, mapping, payload, confirmation, idempotency, and audit foundation.
 - [x] Keep live MyCase OAuth and remote posting disabled while credentials are absent; ship and test the encrypted connection, mapping, payload, confirmation, idempotency, and audit foundation.
+
+## Narrated Tutorial Video
+
+- [x] Define the tutorial audience, target runtime, learning sequence, synthetic-data policy, and live-versus-credential-required disclosures.
+- [x] Capture clean representative visuals for command center, matters, dictation, Matter AI, billing codes, rate cards, Billing Copilot, export, and Clio/MyCase readiness.
+- [x] Write the complete scene-by-scene narration, on-screen callouts, captions, and timing plan.
+- [x] Generate professional narration audio with clear pacing and legal-product pronunciation.
+- [x] Assemble an editable scene-based video with synchronized screenshots, cursor or focus motion, captions, section titles, and disclosure cards.
+- [x] Render a widescreen MP4 suitable for client demos and screen sharing.
+- [x] Review the final video for factual accuracy, synthetic-data privacy, caption readability, audio quality, and honest integration status.
+- [x] Deliver the final MP4 and editable production source.
